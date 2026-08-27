@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { Users, PackageSearch, CalendarClock, Wallet, Plus, X, Check, AlertTriangle, Search, Trash2, Globe } from "lucide-react";
-import { api } from "./api.js";
+import { api, onUnauthorized } from "./api.js";
 
 const STATUS = {
   available: { label: "K dispozici", color: "#3F8D5E", bg: "#EAF4EE" },
@@ -27,7 +27,7 @@ const fmtDate = (iso) => {
   return d.toLocaleDateString("cs-CZ", { day: "numeric", month: "numeric", year: "numeric" });
 };
 const daysBetween = (a, b) => Math.round((new Date(b) - new Date(a)) / 86400000);
-const czk = (n) => (n || 0).toLocaleString("cs-CZ") + " Kč";
+export const czk = (n) => (n || 0).toLocaleString("cs-CZ") + " Kč";
 
 const emptyData = () => ({ clients: [], items: [], reservations: [], payments: [] });
 
@@ -69,6 +69,10 @@ function Modal({ title, onClose, children, wide }) {
 }
 
 export default function App() {
+  // "checking" (ověřuje se přihlášení) | "guest" (přihlašovací obrazovka) | "authed"
+  const [authState, setAuthState] = useState("checking");
+  const [username, setUsername] = useState("");
+
   const [data, setData] = useState(emptyData());
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState(null);
@@ -80,6 +84,26 @@ export default function App() {
   const showToast = useCallback((msg) => {
     setToast(msg);
     setTimeout(() => setToast(null), 2200);
+  }, []);
+
+  // pokud kdykoli server odpoví 401 (session vypršela), vrátíme se na přihlašovací obrazovku
+  useEffect(() => {
+    onUnauthorized(() => setAuthState("guest"));
+  }, []);
+
+  // ověření přihlášení při načtení appky (funguje díky trvalé cookie — appka si tě "pamatuje")
+  useEffect(() => {
+    api
+      .getMe()
+      .then((res) => {
+        if (res.authenticated) {
+          setUsername(res.username);
+          setAuthState("authed");
+        } else {
+          setAuthState("guest");
+        }
+      })
+      .catch(() => setAuthState("guest"));
   }, []);
 
   // počáteční načtení dat z backend API (nahrazuje window.storage z prototypu)
@@ -96,8 +120,19 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    loadState();
-  }, [loadState]);
+    if (authState === "authed") loadState();
+  }, [authState, loadState]);
+
+  const handleLogout = async () => {
+    try {
+      await api.logout();
+    } catch {
+      // odhlásit se i kdyby request selhal — cookie na klientovi stejně přestaneme používat
+    }
+    setAuthState("guest");
+    setLoaded(false);
+    setData(emptyData());
+  };
 
   // derived: item live status + stock, considering overdue and quantities
   const itemsWithStatus = useMemo(() => {
@@ -287,6 +322,19 @@ export default function App() {
   const filteredItems = itemsWithStatus.filter((i) => !q || i.name.toLowerCase().includes(q) || (i.category || "").toLowerCase().includes(q));
   const sortedReservations = [...data.reservations].sort((a, b) => (b.startDate || "").localeCompare(a.startDate || ""));
 
+  if (authState === "checking") {
+    return (
+      <div className="loading-screen">
+        <div className="spinner" />
+        <Style />
+      </div>
+    );
+  }
+
+  if (authState === "guest") {
+    return <LoginScreen onLoggedIn={(u) => { setUsername(u); setAuthState("authed"); }} />;
+  }
+
   if (!loaded) {
     return (
       <div className="loading-screen">
@@ -330,7 +378,13 @@ export default function App() {
           <div className="nav-divider" />
           <NavBtn icon={<Globe size={18} />} label="Veřejný přehled" active={tab === "public"} onClick={() => setTab("public")} />
         </nav>
-        <div className="sidebar-foot">Data se ukládají v databázi na serveru.</div>
+        <div className="sidebar-foot">
+          Přihlášen: {username}
+          <br />
+          <button className="logout-link" onClick={handleLogout}>
+            Odhlásit se
+          </button>
+        </div>
       </aside>
 
       <main className="main">
@@ -629,11 +683,93 @@ export default function App() {
   );
 }
 
+function LoginScreen({ onLoggedIn }) {
+  const [usernames, setUsernames] = useState([]);
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    api
+      .getUsers()
+      .then((list) => {
+        setUsernames(list);
+        if (list.length > 0) setUsername(list[0]);
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!username || !password || submitting) return;
+    setSubmitting(true);
+    setError("");
+    try {
+      await api.login(username, password);
+      onLoggedIn(username);
+    } catch (e) {
+      setError(e.message || "Přihlášení se nezdařilo.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="loading-screen">
+      <Style />
+      <form className="login-card" onSubmit={handleSubmit}>
+        <div className="login-brand">
+          <div className="brand-mark">R</div>
+          <div>
+            <div className="brand-title" style={{ color: "#20281F" }}>Půjčovna</div>
+            <div className="card-sub">rehabilitační pomůcky</div>
+          </div>
+        </div>
+
+        <Field label="Uživatel">
+          {usernames.length > 0 ? (
+            <select value={username} onChange={(e) => setUsername(e.target.value)}>
+              {usernames.map((u) => (
+                <option key={u} value={u}>
+                  {u}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="Uživatelské jméno" />
+          )}
+        </Field>
+        <Field label="Heslo">
+          <input
+            type="password"
+            autoFocus
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="••••••••"
+          />
+        </Field>
+
+        {error && <div className="login-error">{error}</div>}
+
+        <button
+          className="btn btn-primary"
+          type="submit"
+          disabled={submitting || !username || !password}
+          style={{ width: "100%", justifyContent: "center" }}
+        >
+          {submitting ? "Přihlašuji…" : "Přihlásit se"}
+        </button>
+      </form>
+    </div>
+  );
+}
+
 function titleFor(tab) {
   return { dashboard: "Přehled", clients: "Klienti", items: "Pomůcky", reservations: "Výpůjčky", payments: "Platby", public: "Veřejný přehled" }[tab];
 }
 
-function PublicStockPage({ items }) {
+export function PublicStockPage({ items, standalone }) {
   const visible = items.filter((i) => !i.serviceFlag);
   const byCategory = {};
   visible.forEach((it) => {
@@ -645,7 +781,12 @@ function PublicStockPage({ items }) {
   return (
     <div className="public-page">
       <div className="public-note">
-        <Globe size={14} /> Náhled, jak by tato stránka mohla vypadat na vašem webu — bez přihlášení, jen s dostupností. Ceny a jména klientů se zde nezobrazují.
+        <Globe size={14} />{" "}
+        {standalone ? (
+          "Tato stránka je veřejně dostupná bez přihlášení — odkaz na ni můžeš sdílet s klienty. Jména klientů se zde nezobrazují."
+        ) : (
+          <>Takhle vidí dostupnost klienti na veřejném odkazu <span className="mono">/verejny-prehled</span> — bez přihlášení, bez jmen klientů.</>
+        )}
       </div>
       <div className="public-hero">
         <h2>Aktuální dostupnost pomůcek</h2>
@@ -692,7 +833,7 @@ function NavBtn({ icon, label, active, onClick }) {
   );
 }
 
-function Empty({ text }) {
+export function Empty({ text }) {
   return <div className="empty">{text}</div>;
 }
 
@@ -1000,7 +1141,7 @@ function PaymentModal({ clients, onClose, onSave }) {
   );
 }
 
-function Style() {
+export function Style() {
   return (
     <style>{`
       * { box-sizing: border-box; }
@@ -1046,6 +1187,8 @@ function Style() {
       .nav-btn:hover { background: rgba(255,255,255,0.06); color:#fff; }
       .nav-btn.active { background:#24492D; color:#fff; }
       .sidebar-foot { font-size:10.5px; color:#8FAA8A; padding: 10px 8px 0; border-top: 1px solid rgba(255,255,255,0.08); margin-top: 12px; }
+      .logout-link { background:none; border:none; color:#C7D9C0; font-size:10.5px; text-decoration:underline; cursor:pointer; padding:2px 0 0; }
+      .logout-link:hover { color:#fff; }
 
       .main { flex:1; min-width:0; }
       .topbar {
@@ -1171,6 +1314,16 @@ function Style() {
       .public-cat-title { font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:#8C8470; margin-bottom:10px; font-weight:600; }
       .public-card { display:flex; flex-direction:column; gap:8px; }
       .public-ok { background:#EAF4EE; color:#3F8D5E; border-color:#CDE7D8; align-self:flex-start; }
+
+      .login-card {
+        background:#fff; border:1px solid #E8E0C8; border-radius:14px; padding:28px 26px;
+        width:100%; max-width:340px; color-scheme:light;
+      }
+      .login-brand { display:flex; align-items:center; gap:10px; margin-bottom:22px; }
+      .login-error {
+        font-size:12.5px; color:#B5482F; background:#FAECE7; border:1px solid #F0CFC4;
+        border-radius:8px; padding:8px 10px; margin-bottom:12px;
+      }
 
       .toast {
         position:fixed; bottom: 22px; left:50%; transform:translateX(-50%);

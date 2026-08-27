@@ -22,6 +22,9 @@ services:
     environment:
       DATABASE_URL: postgresql://pujcovna:pujcovna@db:5432/pujcovna
       PORT: 4000
+      JWT_SECRET: dev-tajny-klic-zmen-v-produkci
+      ADMIN_USERNAME: admin
+      ADMIN_PASSWORD: admin123
     ports:
       - "4000:4000"
     depends_on:

@@ -1,11 +1,21 @@
 // Tenká vrstva nad fetch() pro komunikaci s backend API.
 const BASE = "/api";
 
+// Zavolá se, kdykoli server odpoví 401 (nepřihlášeno / session vypršela) —
+// App.jsx si na to napojí přepnutí na přihlašovací obrazovku.
+let unauthorizedHandler = null;
+export function onUnauthorized(handler) {
+  unauthorizedHandler = handler;
+}
+
 async function request(path, options = {}) {
   const res = await fetch(BASE + path, {
     headers: { "Content-Type": "application/json" },
     ...options,
   });
+  if (res.status === 401 && unauthorizedHandler) {
+    unauthorizedHandler();
+  }
   if (!res.ok) {
     let message = "Požadavek na server selhal.";
     try {
@@ -21,6 +31,12 @@ async function request(path, options = {}) {
 }
 
 export const api = {
+  getMe: () => request("/auth/me"),
+  getUsers: () => request("/auth/users"),
+  login: (username, password) => request("/auth/login", { method: "POST", body: JSON.stringify({ username, password }) }),
+  logout: () => request("/auth/logout", { method: "POST" }),
+  getPublicItems: () => request("/public/items"),
+
   getState: () => request("/state"),
 
   createClient: (data) => request("/clients", { method: "POST", body: JSON.stringify(data) }),
