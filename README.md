@@ -68,6 +68,29 @@ npm run dev             # spustí Vite dev server na http://localhost:5173
 Vite dev server automaticky přeposílá volání `/api/*` na backend
 (`http://localhost:4000`), takže appka funguje bez dalšího nastavení.
 
+## Nasazení do cloudu zdarma (Render.com)
+
+Nejjednodušší způsob, jak appku vyzkoušet na telefonu/tabletu nebo ukázat
+někomu jinému bez instalace čehokoli — appka poběží na veřejné adrese.
+
+1. Založ si účet na https://render.com (jde přes GitHub, zdarma, karta se
+   nevyžaduje).
+2. V Render dashboardu klikni **New +** → **Blueprint**.
+3. Připoj tenhle GitHub repozitář (`tomaskasak/pujcovna_pomucek_APP`) —
+   Render sám najde soubor `render.yaml` v kořeni repozitáře a podle něj
+   založí web službu i PostgreSQL databázi najednou.
+4. Klikni **Apply** a počkej, než doběhne build (pár minut).
+5. Až je hotovo, Render appce přidělí veřejnou adresu tvaru
+   `https://pujcovna-backend-xxxx.onrender.com` — tu si otevři v prohlížeči.
+
+**Na co pamatovat u bezplatného tieru:**
+- Web služba po ~15 minutách bez provozu „usne" a první další request ji
+  pár desítek sekund budí — to je normální, ne chyba.
+- Bezplatná PostgreSQL databáze má na Renderu časově omezenou životnost
+  (řádově týdny/měsíce dle aktuálních podmínek Render) — pro dlouhodobý
+  ostrý provoz bude časem potřeba přejít na placený tier nebo databázi
+  jinam přenést.
+
 ## Produkční nasazení (jeden server)
 
 ```bash
