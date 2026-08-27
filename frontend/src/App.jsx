@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
-import { Users, PackageSearch, CalendarClock, Wallet, Plus, X, Check, AlertTriangle, Search, Trash2, Globe } from "lucide-react";
+import { Users, PackageSearch, CalendarClock, Wallet, Plus, X, Check, AlertTriangle, Search, Trash2, Globe, LogOut } from "lucide-react";
 import { api, onUnauthorized } from "./api.js";
 
 const STATUS = {
@@ -377,6 +377,9 @@ export default function App() {
           <NavBtn icon={<Wallet size={18} />} label="Platby" active={tab === "payments"} onClick={() => setTab("payments")} />
           <div className="nav-divider" />
           <NavBtn icon={<Globe size={18} />} label="Veřejný přehled" active={tab === "public"} onClick={() => setTab("public")} />
+          <button className="nav-btn mobile-logout-btn" onClick={handleLogout} title={`Odhlásit ${username}`}>
+            <LogOut size={18} />
+          </button>
         </nav>
         <div className="sidebar-foot">
           Přihlášen: {username}
@@ -1180,6 +1183,7 @@ export function Style() {
       .brand-sub { font-size:11px; color:#C7D9C0; letter-spacing:.02em; }
 
       .nav { display:flex; flex-direction:column; gap:2px; flex:1; }
+      .mobile-logout-btn { display:none; }
       .nav-btn {
         display:flex; align-items:center; gap:10px; padding:9px 10px; border-radius:8px;
         background:transparent; border:none; color:#D7E5CE; font-size:13.5px; cursor:pointer; text-align:left;
@@ -1196,12 +1200,12 @@ export function Style() {
         padding: 20px 28px; border-bottom: 1px solid #E8E0C8; flex-wrap: wrap;
       }
       .topbar h1 { font-family: Georgia, 'Times New Roman', serif; font-weight:600; font-size:22px; margin:0; }
-      .topbar-actions { display:flex; align-items:center; gap:10px; }
+      .topbar-actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
 
       .search { display:flex; align-items:center; gap:6px; background:#fff; border:1px solid #DDD3B8; border-radius:8px; padding:7px 10px; color:#6B6555; }
       .search input { border:none; outline:none; font-size:13px; background:transparent; width: 140px; }
 
-      .btn { display:inline-flex; align-items:center; gap:6px; border:none; border-radius:8px; padding:9px 14px; font-size:13.5px; font-weight:500; cursor:pointer; }
+      .btn { display:inline-flex; align-items:center; gap:6px; border:none; border-radius:8px; padding:9px 14px; font-size:13.5px; font-weight:500; cursor:pointer; white-space:nowrap; }
       .btn-primary { background:#2F5D3F; color:#fff; }
       .btn-primary:disabled { opacity:.4; cursor:not-allowed; }
       .btn-ghost { background:#fff; color:#2F5D3F; border:1px solid #DDD3B8; }
@@ -1247,10 +1251,10 @@ export function Style() {
 
       .empty { color:#8C8470; font-size:13.5px; padding: 30px 0; text-align:center; border: 1px dashed #DDD3B8; border-radius: 10px; }
 
-      .table-wrap { background:#fff; border:1px solid #E8E0C8; border-radius:12px; overflow:hidden; }
+      .table-wrap { background:#fff; border:1px solid #E8E0C8; border-radius:12px; overflow-x:auto; -webkit-overflow-scrolling:touch; }
       .table { width:100%; border-collapse:collapse; font-size:13px; }
-      .table th { text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:#8C8470; padding:10px 14px; border-bottom:1px solid #E8E0C8; }
-      .table td { padding:11px 14px; border-bottom:1px solid #F1ECD8; }
+      .table th { text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:#8C8470; padding:10px 14px; border-bottom:1px solid #E8E0C8; white-space:nowrap; }
+      .table td { padding:11px 14px; border-bottom:1px solid #F1ECD8; white-space:nowrap; }
       .table tr:last-child td { border-bottom:none; }
 
       .quick-links { display:flex; flex-wrap:wrap; gap:10px; margin-top: 26px; }
@@ -1335,8 +1339,14 @@ export function Style() {
         .sidebar { width:100%; min-height:auto; flex-direction:row; align-items:center; padding: 12px 14px; }
         .brand { padding: 0; }
         .brand-sub { display:none; }
-        .nav { flex-direction:row; flex:none; margin-left:auto; }
+        .nav {
+          flex-direction:row; flex:0 1 auto; margin-left:auto; min-width:0;
+          overflow-x:auto; -webkit-overflow-scrolling:touch; gap:0;
+        }
+        .nav-btn { padding:8px 7px; flex-shrink:0; }
         .nav-btn span { display:none; }
+        .nav-divider { display:none; }
+        .mobile-logout-btn { display:flex; }
         .sidebar-foot { display:none; }
         .content { padding: 18px 16px 50px; }
         .topbar { padding: 16px; }
