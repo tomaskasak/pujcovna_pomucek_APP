@@ -42,11 +42,17 @@ CREATE TABLE IF NOT EXISTS reservations (
   end_date DATE NOT NULL,
   deposit INTEGER NOT NULL DEFAULT 0,
   price INTEGER NOT NULL DEFAULT 0,
-  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'returned')),
+  -- pending/rejected = žádost podaná z veřejné stránky, čeká na vyřízení obsluhou
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('pending', 'active', 'returned', 'rejected')),
   payment_status TEXT NOT NULL DEFAULT 'nezaplaceno' CHECK (payment_status IN ('nezaplaceno', 'zaloha', 'zaplaceno')),
   returned_at DATE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Rozšíření CHECK na status o 'pending'/'rejected' i pro databázi založenou před touto verzí
+-- (constraint bez explicitního jména dostal od PostgreSQL výchozí název reservations_status_check).
+ALTER TABLE reservations DROP CONSTRAINT IF EXISTS reservations_status_check;
+ALTER TABLE reservations ADD CONSTRAINT reservations_status_check CHECK (status IN ('pending', 'active', 'returned', 'rejected'));
 
 CREATE TABLE IF NOT EXISTS payments (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

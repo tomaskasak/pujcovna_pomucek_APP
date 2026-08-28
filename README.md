@@ -12,7 +12,9 @@ trvale a sdílená mezi zařízeními.
 Appka je za přihlášením (uživatelské jméno + heslo). Výjimkou je stránka
 **„Veřejný přehled"** na `/verejny-prehled`, která je záměrně přístupná bez
 přihlášení — je určená ke sdílení s klienty, ukazuje jen dostupnost pomůcek
-a ceny, žádná jména klientů.
+a ceny, žádná jména klientů. Klienti si přes ni mohou u volné pomůcky rovnou
+poslat **žádost o rezervaci** (jméno, telefon, termín od–do) — nejde o
+závaznou rezervaci, objeví se v appce ke schválení nebo zamítnutí.
 
 ## Architektura
 
@@ -127,8 +129,16 @@ celá appka běží na jednom portu (`PORT` z `.env`, výchozí 4000).
   označení „v servisu", tlačítko pro načtení oficiálního ceníku
 - **Výpůjčky** — vytvoření/vrácení výpůjčky s automatickým výpočtem ceny,
   stav úhrady (nezaplaceno/záloha/zaplaceno)
+- **Žádosti o rezervaci z veřejné stránky** — klient si na `/verejny-prehled`
+  u volné pomůcky vybere termín a pošle žádost (jméno, telefon). V appce se
+  objeví v „Nové žádosti o rezervaci" na Přehledu a v tabulce Výpůjček
+  (s odznakem u položky Výpůjčky v menu) ke schválení nebo zamítnutí.
+  Schválená žádost se stane normální aktivní výpůjčkou. Dokud žádost čeká
+  na vyřízení, pomůcka se na veřejné stránce zobrazuje jako nedostupná
+  (aby ji nemohl žádat víc lidí najednou).
 - **Platby** — evidence plateb, export do CSV
-- **Veřejný přehled** — read-only náhled dostupnosti pomůcek bez cen klientů
+- **Veřejný přehled** — read-only náhled dostupnosti pomůcek bez cen klientů,
+  s možností poslat žádost o rezervaci
 
 ## Přihlašování — jak přidat další účet
 

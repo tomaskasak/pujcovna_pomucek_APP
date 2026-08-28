@@ -36,6 +36,7 @@ export const api = {
   login: (username, password) => request("/auth/login", { method: "POST", body: JSON.stringify({ username, password }) }),
   logout: () => request("/auth/logout", { method: "POST" }),
   getPublicItems: () => request("/public/items"),
+  submitPublicReservation: (data) => request("/public/reservations", { method: "POST", body: JSON.stringify(data) }),
 
   getState: () => request("/state"),
 
@@ -49,6 +50,9 @@ export const api = {
 
   createReservation: (data) => request("/reservations", { method: "POST", body: JSON.stringify(data) }),
   returnReservation: (id) => request(`/reservations/${id}/return`, { method: "PUT" }),
+  approveReservation: (id) => request(`/reservations/${id}/approve`, { method: "PUT" }),
+  rejectReservation: (id) => request(`/reservations/${id}/reject`, { method: "PUT" }),
+  deleteReservation: (id) => request(`/reservations/${id}`, { method: "DELETE" }),
   setPaymentStatus: (id, paymentStatus) =>
     request(`/reservations/${id}/payment-status`, { method: "PUT", body: JSON.stringify({ paymentStatus }) }),
 

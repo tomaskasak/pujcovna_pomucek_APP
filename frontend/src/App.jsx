@@ -7,11 +7,13 @@ const STATUS = {
   rented: { label: "Půjčeno", color: "#3B6E8F", bg: "#EAF1F6" },
   service: { label: "V servisu", color: "#8A6D3B", bg: "#F6F0E4" },
   overdue: { label: "Po termínu", color: "#B5482F", bg: "#FAECE7" },
+  pending: { label: "Čeká na schválení", color: "#6B4FA0", bg: "#EFE9F7" },
+  rejected: { label: "Zamítnuto", color: "#6B6555", bg: "#F1ECD8" },
 };
 
 // tiers: [{ days: 1, rate: 250 }, { days: 14, rate: 230 }, { days: 30, rate: 200 }]
 // vrací sazbu platnou pro daný počet dní výpůjčky (bere nejvyšší práh <= days)
-function effectiveRate(item, days) {
+export function effectiveRate(item, days) {
   const tiers = item.priceTiers && item.priceTiers.length ? item.priceTiers : [{ days: 1, rate: item.dailyRate || 0 }];
   const sorted = [...tiers].sort((a, b) => a.days - b.days);
   let rate = sorted[0].rate;
@@ -20,13 +22,13 @@ function effectiveRate(item, days) {
   }
   return rate;
 }
-const todayISO = () => new Date().toISOString().slice(0, 10);
-const fmtDate = (iso) => {
+export const todayISO = () => new Date().toISOString().slice(0, 10);
+export const fmtDate = (iso) => {
   if (!iso) return "—";
   const d = new Date(iso + "T00:00:00");
   return d.toLocaleDateString("cs-CZ", { day: "numeric", month: "numeric", year: "numeric" });
 };
-const daysBetween = (a, b) => Math.round((new Date(b) - new Date(a)) / 86400000);
+export const daysBetween = (a, b) => Math.round((new Date(b) - new Date(a)) / 86400000);
 export const czk = (n) => (n || 0).toLocaleString("cs-CZ") + " Kč";
 
 const emptyData = () => ({ clients: [], items: [], reservations: [], payments: [] });
@@ -43,7 +45,7 @@ function StampBadge({ status }) {
   );
 }
 
-function Field({ label, children }) {
+export function Field({ label, children }) {
   return (
     <label className="field">
       <span className="field-label">{label}</span>
@@ -52,7 +54,7 @@ function Field({ label, children }) {
   );
 }
 
-function Modal({ title, onClose, children, wide }) {
+export function Modal({ title, onClose, children, wide }) {
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className={"modal" + (wide ? " modal-wide" : "")} onClick={(e) => e.stopPropagation()}>
@@ -176,7 +178,8 @@ export default function App() {
     const revenueThisMonth = data.payments
       .filter((p) => p.date && p.date.startsWith(monthStart))
       .reduce((s, p) => s + Number(p.amount || 0), 0);
-    return { totalItems, rentedNow, overdue, revenueThisMonth, clients: data.clients.length };
+    const pendingRequests = data.reservations.filter((r) => r.status === "pending").length;
+    return { totalItems, rentedNow, overdue, revenueThisMonth, clients: data.clients.length, pendingRequests };
   }, [data, itemsWithStatus]);
 
   // ---- CRUD helpery — volají backend API, lokální stav aktualizují podle odpovědi ----
@@ -275,6 +278,32 @@ export default function App() {
       showToast(e.message);
     }
   };
+  const approveReservation = async (id) => {
+    try {
+      const updated = await api.approveReservation(id);
+      setData((d) => ({ ...d, reservations: d.reservations.map((r) => (r.id === id ? updated : r)) }));
+      showToast("Žádost schválena — je z ní aktivní výpůjčka");
+    } catch (e) {
+      showToast(e.message);
+    }
+  };
+  const rejectReservation = async (id) => {
+    try {
+      const updated = await api.rejectReservation(id);
+      setData((d) => ({ ...d, reservations: d.reservations.map((r) => (r.id === id ? updated : r)) }));
+      showToast("Žádost zamítnuta");
+    } catch (e) {
+      showToast(e.message);
+    }
+  };
+  const deleteReservation = async (id) => {
+    try {
+      await api.deleteReservation(id);
+      setData((d) => ({ ...d, reservations: d.reservations.filter((r) => r.id !== id) }));
+    } catch (e) {
+      showToast(e.message);
+    }
+  };
 
   const addPayment = async (p) => {
     try {
@@ -320,7 +349,13 @@ export default function App() {
   const q = query.trim().toLowerCase();
   const filteredClients = data.clients.filter((c) => !q || c.name.toLowerCase().includes(q) || (c.phone || "").includes(q));
   const filteredItems = itemsWithStatus.filter((i) => !q || i.name.toLowerCase().includes(q) || (i.category || "").toLowerCase().includes(q));
-  const sortedReservations = [...data.reservations].sort((a, b) => (b.startDate || "").localeCompare(a.startDate || ""));
+  // nevyřízené žádosti (pending) vždy nahoře, jinak od nejnovějšího data
+  const sortedReservations = [...data.reservations].sort((a, b) => {
+    const pendingA = a.status === "pending" ? 0 : 1;
+    const pendingB = b.status === "pending" ? 0 : 1;
+    if (pendingA !== pendingB) return pendingA - pendingB;
+    return (b.startDate || "").localeCompare(a.startDate || "");
+  });
 
   if (authState === "checking") {
     return (
@@ -373,7 +408,13 @@ export default function App() {
           <NavBtn icon={<CalendarClock size={18} />} label="Přehled" active={tab === "dashboard"} onClick={() => setTab("dashboard")} />
           <NavBtn icon={<Users size={18} />} label="Klienti" active={tab === "clients"} onClick={() => setTab("clients")} />
           <NavBtn icon={<PackageSearch size={18} />} label="Pomůcky" active={tab === "items"} onClick={() => setTab("items")} />
-          <NavBtn icon={<CalendarClock size={18} />} label="Výpůjčky" active={tab === "reservations"} onClick={() => setTab("reservations")} />
+          <NavBtn
+            icon={<CalendarClock size={18} />}
+            label="Výpůjčky"
+            active={tab === "reservations"}
+            onClick={() => setTab("reservations")}
+            badge={stats.pendingRequests}
+          />
           <NavBtn icon={<Wallet size={18} />} label="Platby" active={tab === "payments"} onClick={() => setTab("payments")} />
           <div className="nav-divider" />
           <NavBtn icon={<Globe size={18} />} label="Veřejný přehled" active={tab === "public"} onClick={() => setTab("public")} />
@@ -435,7 +476,15 @@ export default function App() {
 
         <div className="content">
           {tab === "dashboard" && (
-            <Dashboard stats={stats} items={itemsWithStatus} clients={data.clients} onGoto={setTab} />
+            <Dashboard
+              stats={stats}
+              items={itemsWithStatus}
+              clients={data.clients}
+              reservations={data.reservations}
+              onGoto={setTab}
+              onApprove={approveReservation}
+              onReject={rejectReservation}
+            />
           )}
 
           {tab === "clients" && (
@@ -537,24 +586,31 @@ export default function App() {
                       const item = data.items.find((i) => i.id === r.itemId);
                       const client = clientById(r.clientId);
                       const overdue = r.status === "active" && r.endDate && r.endDate < todayISO();
-                      const st = r.status === "returned" ? "returned" : overdue ? "overdue" : "rented";
+                      const st = overdue ? "overdue" : r.status === "active" ? "rented" : r.status;
                       return (
                         <tr key={r.id}>
-                          <td>{client?.name || "—"}</td>
+                          <td>
+                            {client?.name || "—"}
+                            {client?.phone && <div className="table-subtext mono">{client.phone}</div>}
+                          </td>
                           <td>{item?.name || "—"}{r.quantity > 1 ? ` ×${r.quantity}` : ""}</td>
                           <td className="mono">{fmtDate(r.startDate)}</td>
                           <td className="mono">{fmtDate(r.endDate)}</td>
                           <td className="mono">{czk(r.price)}</td>
                           <td>
-                            <select
-                              className={"pay-select pay-" + (r.paymentStatus || "nezaplaceno")}
-                              value={r.paymentStatus || "nezaplaceno"}
-                              onChange={(e) => setPaymentStatus(r.id, e.target.value)}
-                            >
-                              <option value="nezaplaceno">Nezaplaceno</option>
-                              <option value="zaloha">Záloha</option>
-                              <option value="zaplaceno">Zaplaceno</option>
-                            </select>
+                            {r.status === "pending" || r.status === "rejected" ? (
+                              "—"
+                            ) : (
+                              <select
+                                className={"pay-select pay-" + (r.paymentStatus || "nezaplaceno")}
+                                value={r.paymentStatus || "nezaplaceno"}
+                                onChange={(e) => setPaymentStatus(r.id, e.target.value)}
+                              >
+                                <option value="nezaplaceno">Nezaplaceno</option>
+                                <option value="zaloha">Záloha</option>
+                                <option value="zaplaceno">Zaplaceno</option>
+                              </select>
+                            )}
                           </td>
                           <td>
                             {r.status === "returned" ? (
@@ -569,6 +625,21 @@ export default function App() {
                             {r.status === "active" && (
                               <button className="link-btn" onClick={() => returnReservation(r.id)}>
                                 <Check size={14} /> Vrátit
+                              </button>
+                            )}
+                            {r.status === "pending" && (
+                              <div className="row-actions">
+                                <button className="link-btn" onClick={() => approveReservation(r.id)}>
+                                  <Check size={14} /> Schválit
+                                </button>
+                                <button className="link-btn link-btn-danger" onClick={() => rejectReservation(r.id)}>
+                                  Zamítnout
+                                </button>
+                              </div>
+                            )}
+                            {r.status === "rejected" && (
+                              <button className="icon-btn danger" onClick={() => deleteReservation(r.id)} title="Smazat žádost">
+                                <Trash2 size={14} />
                               </button>
                             )}
                           </td>
@@ -772,7 +843,7 @@ function titleFor(tab) {
   return { dashboard: "Přehled", clients: "Klienti", items: "Pomůcky", reservations: "Výpůjčky", payments: "Platby", public: "Veřejný přehled" }[tab];
 }
 
-export function PublicStockPage({ items, standalone }) {
+export function PublicStockPage({ items, standalone, onReserve }) {
   const visible = items.filter((i) => !i.serviceFlag);
   const byCategory = {};
   visible.forEach((it) => {
@@ -809,6 +880,11 @@ export function PublicStockPage({ items, standalone }) {
                 ) : (
                   <span className="stock-pill stock-empty">Momentálně vyprodáno</span>
                 )}
+                {onReserve && it.availableQty > 0 && (
+                  <button className="link-btn public-reserve-btn" onClick={() => onReserve(it)}>
+                    Rezervovat →
+                  </button>
+                )}
               </div>
             ))}
           </div>
@@ -827,11 +903,12 @@ function initials(name) {
     .join("");
 }
 
-function NavBtn({ icon, label, active, onClick }) {
+function NavBtn({ icon, label, active, onClick, badge }) {
   return (
     <button className={"nav-btn" + (active ? " active" : "")} onClick={onClick}>
       {icon}
-      <span>{label}</span>
+      <span className="nav-label">{label}</span>
+      {badge > 0 && <span className="nav-badge">{badge}</span>}
     </button>
   );
 }
@@ -840,8 +917,9 @@ export function Empty({ text }) {
   return <div className="empty">{text}</div>;
 }
 
-function Dashboard({ stats, items, clients, onGoto }) {
+function Dashboard({ stats, items, clients, reservations, onGoto, onApprove, onReject }) {
   const overdueItems = items.filter((i) => i.hasOverdue);
+  const pendingReservations = reservations.filter((r) => r.status === "pending");
   return (
     <div>
       <div className="stat-grid">
@@ -862,6 +940,44 @@ function Dashboard({ stats, items, clients, onGoto }) {
           <div className="stat-label">Tržby tento měsíc</div>
         </div>
       </div>
+
+      <div className="section-title">
+        Nové žádosti o rezervaci{pendingReservations.length > 0 ? ` (${pendingReservations.length})` : ""}
+      </div>
+      {pendingReservations.length === 0 ? (
+        <Empty text="Zatím žádné nevyřízené žádosti z veřejné stránky." />
+      ) : (
+        <div className="grid-cards">
+          {pendingReservations.map((r) => {
+            const item = items.find((i) => i.id === r.itemId);
+            const client = clients.find((c) => c.id === r.clientId);
+            return (
+              <div className="card" key={r.id}>
+                <div className="card-row">
+                  <div className="grow">
+                    <div className="card-title">{item?.name || "—"}{r.quantity > 1 ? ` ×${r.quantity}` : ""}</div>
+                    <div className="card-sub">
+                      {client?.name} · {client?.phone}
+                    </div>
+                  </div>
+                  <StampBadge status="pending" />
+                </div>
+                <div className="card-line mono">
+                  {fmtDate(r.startDate)} – {fmtDate(r.endDate)} · {czk(r.price)}
+                </div>
+                <div className="card-foot-actions">
+                  <button className="link-btn" onClick={() => onApprove(r.id)}>
+                    <Check size={14} /> Schválit
+                  </button>
+                  <button className="link-btn link-btn-danger" onClick={() => onReject(r.id)}>
+                    Zamítnout
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       <div className="section-title">Po termínu vrácení</div>
       {overdueItems.length === 0 ? (
@@ -1190,6 +1306,10 @@ export function Style() {
       }
       .nav-btn:hover { background: rgba(255,255,255,0.06); color:#fff; }
       .nav-btn.active { background:#24492D; color:#fff; }
+      .nav-badge {
+        margin-left:auto; background:#E0A343; color:#2F5D3F; font-size:10px; font-weight:700;
+        line-height:1; padding:3px 6px; border-radius:10px;
+      }
       .sidebar-foot { font-size:10.5px; color:#8FAA8A; padding: 10px 8px 0; border-top: 1px solid rgba(255,255,255,0.08); margin-top: 12px; }
       .logout-link { background:none; border:none; color:#C7D9C0; font-size:10.5px; text-decoration:underline; cursor:pointer; padding:2px 0 0; }
       .logout-link:hover { color:#fff; }
@@ -1244,6 +1364,9 @@ export function Style() {
 
       .link-btn { display:inline-flex; align-items:center; gap:4px; background:none; border:none; color:#2F5D3F; font-size:12.5px; font-weight:500; cursor:pointer; text-decoration:underline; padding:0; }
       .link-btn:disabled { color:#B4BEBB; cursor:not-allowed; text-decoration:none; }
+      .link-btn-danger { color:#B5482F; }
+      .row-actions { display:flex; align-items:center; gap:10px; white-space:nowrap; }
+      .table-subtext { font-size:11px; color:#8C8470; margin-top:2px; }
 
       .icon-btn { background:none; border:none; color:#8C8470; cursor:pointer; padding:4px; border-radius:6px; display:flex; }
       .icon-btn:hover { background:#F1ECD8; }
@@ -1318,6 +1441,10 @@ export function Style() {
       .public-cat-title { font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:#8C8470; margin-bottom:10px; font-weight:600; }
       .public-card { display:flex; flex-direction:column; gap:8px; }
       .public-ok { background:#EAF4EE; color:#3F8D5E; border-color:#CDE7D8; align-self:flex-start; }
+      .public-reserve-btn { margin-top:2px; }
+      .reservation-success { text-align:center; padding: 10px 4px 4px; }
+      .reservation-success svg { margin-bottom: 10px; }
+      .reservation-success p { color:#6B6555; font-size:13.5px; margin: 6px 0 18px; }
 
       .login-card {
         background:#fff; border:1px solid #E8E0C8; border-radius:14px; padding:28px 26px;
@@ -1344,7 +1471,8 @@ export function Style() {
           overflow-x:auto; -webkit-overflow-scrolling:touch; gap:0;
         }
         .nav-btn { padding:8px 7px; flex-shrink:0; }
-        .nav-btn span { display:none; }
+        .nav-btn .nav-label { display:none; }
+        .nav-badge { margin-left:0; }
         .nav-divider { display:none; }
         .mobile-logout-btn { display:flex; }
         .sidebar-foot { display:none; }
