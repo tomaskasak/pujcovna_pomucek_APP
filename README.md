@@ -128,8 +128,8 @@ spustí se bez adresního řádku prohlížeče.
 2. Klepni na nabídku (tři tečky vpravo nahoře)
 3. Zvol **„Přidat na plochu"** nebo **„Instalovat aplikaci"** (Chrome to
    někdy nabídne i sám automaticky bannerem dole)
-4. Potvrď — na ploše přibude ikonka ve stejném stylu jako logo appky
-   (oranžový čtverec s „R")
+4. Potvrď — na ploše přibude ikonka s logem REHARENT Krkonoše (hory,
+   ikony lůžka a vozíku, nápis „RRK")
 
 Totéž funguje i pro veřejnou stránku `/verejny-prehled` — pokud si ji
 klient přidá na plochu, otevře se mu rovnou přehled dostupnosti.
