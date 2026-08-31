@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
-import { Users, PackageSearch, CalendarClock, Wallet, Plus, X, Check, AlertTriangle, Search, Trash2, Globe, LogOut, Pencil } from "lucide-react";
+import { Users, PackageSearch, CalendarClock, Wallet, Plus, X, Check, AlertTriangle, Search, Trash2, Globe, LogOut, Pencil, RotateCcw } from "lucide-react";
 import { api, onUnauthorized } from "./api.js";
 
 const STATUS = {
@@ -290,6 +290,15 @@ export default function App() {
       showToast(e.message);
     }
   };
+  const unreturnReservation = async (id) => {
+    try {
+      const updated = await api.unreturnReservation(id);
+      setData((d) => ({ ...d, reservations: d.reservations.map((r) => (r.id === id ? updated : r)) }));
+      showToast("Výpůjčka vrácena zpět mezi aktivní");
+    } catch (e) {
+      showToast(e.message);
+    }
+  };
   const setPaymentStatus = async (id, paymentStatus) => {
     try {
       const updated = await api.setPaymentStatus(id, paymentStatus);
@@ -317,6 +326,7 @@ export default function App() {
     }
   };
   const deleteReservation = async (id) => {
+    if (!window.confirm("Opravdu smazat tuto výpůjčku? Tuto akci nelze vzít zpět.")) return;
     try {
       await api.deleteReservation(id);
       setData((d) => ({ ...d, reservations: d.reservations.filter((r) => r.id !== id) }));
@@ -665,6 +675,11 @@ export default function App() {
                                   </button>
                                 </>
                               )}
+                              {r.status === "returned" && (
+                                <button className="link-btn" onClick={() => unreturnReservation(r.id)}>
+                                  <RotateCcw size={14} /> Vrátit zpět
+                                </button>
+                              )}
                               {(r.status === "active" || r.status === "pending") && (
                                 <button
                                   className="icon-btn"
@@ -674,11 +689,9 @@ export default function App() {
                                   <Pencil size={14} />
                                 </button>
                               )}
-                              {r.status === "rejected" && (
-                                <button className="icon-btn danger" onClick={() => deleteReservation(r.id)} title="Smazat žádost">
-                                  <Trash2 size={14} />
-                                </button>
-                              )}
+                              <button className="icon-btn danger" onClick={() => deleteReservation(r.id)} title="Smazat výpůjčku">
+                                <Trash2 size={14} />
+                              </button>
                             </div>
                           </td>
                         </tr>

@@ -96,6 +96,42 @@ router.put(
   })
 );
 
+// Vrátit omylem/předčasně vrácenou výpůjčku zpět mezi aktivní.
+router.put(
+  "/:id/unreturn",
+  asyncHandler(async (req, res) => {
+    const { rows: existingRows } = await pool.query(`SELECT * FROM reservations WHERE id = $1`, [req.params.id]);
+    if (existingRows.length === 0) {
+      return res.status(404).json({ error: "Výpůjčka nenalezena." });
+    }
+    const reservation = existingRows[0];
+    if (reservation.status !== "returned") {
+      return res.status(409).json({ error: "Tuto výpůjčku nelze vrátit zpět — není vedená jako vrácená." });
+    }
+
+    // bezpečnostní kontrola dostupnosti — mezitím mohl pomůcku dostat jiný aktivní zápis
+    if (reservation.item_id) {
+      const { rows: itemRows } = await pool.query(`SELECT quantity_total FROM items WHERE id = $1`, [reservation.item_id]);
+      if (itemRows.length > 0) {
+        const { rows: activeRows } = await pool.query(
+          `SELECT COALESCE(SUM(quantity), 0) AS rented FROM reservations WHERE item_id = $1 AND status = 'active'`,
+          [reservation.item_id]
+        );
+        const availableQty = itemRows[0].quantity_total - Number(activeRows[0].rented);
+        if (reservation.quantity > availableQty) {
+          return res.status(409).json({ error: `Nelze vrátit zpět — k dispozici je jen ${availableQty} ks.` });
+        }
+      }
+    }
+
+    const { rows } = await pool.query(
+      `UPDATE reservations SET status = 'active', returned_at = NULL WHERE id = $1 RETURNING *`,
+      [req.params.id]
+    );
+    res.json(mapReservation(rows[0]));
+  })
+);
+
 // Schválení žádosti podané z veřejné stránky — stane se z ní normální aktivní výpůjčka.
 router.put(
   "/:id/approve",
@@ -142,16 +178,14 @@ router.put(
   })
 );
 
-// Smazat lze jen nevyřízenou nebo zamítnutou žádost — historii skutečných výpůjček nelze smazat.
+// Smazání výpůjčky/žádosti — pro opravu omylů (nesprávně vytvořená výpůjčka apod.).
+// Záměrně bez omezení na stav: frontend si před smazáním vyžádá potvrzení.
 router.delete(
   "/:id",
   asyncHandler(async (req, res) => {
-    const { rows } = await pool.query(
-      `DELETE FROM reservations WHERE id = $1 AND status IN ('pending', 'rejected') RETURNING id`,
-      [req.params.id]
-    );
+    const { rows } = await pool.query(`DELETE FROM reservations WHERE id = $1 RETURNING id`, [req.params.id]);
     if (rows.length === 0) {
-      return res.status(409).json({ error: "Lze smazat jen nevyřízenou nebo zamítnutou žádost." });
+      return res.status(404).json({ error: "Výpůjčka nenalezena." });
     }
     res.status(204).end();
   })

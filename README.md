@@ -130,8 +130,11 @@ celá appka běží na jednom portu (`PORT` z `.env`, výchozí 4000).
 - **Výpůjčky** — vytvoření/vrácení výpůjčky s automatickým výpočtem ceny
   podle ceníku, kterou ale jde kdykoli ručně přepsat (např. při domluvené
   slevě s klientem) — appka nabídne i tlačítko pro návrat k ceníkové ceně.
-  Dále stav úhrady (nezaplaceno/záloha/zaplaceno) a dodatečná editace
-  termínu, počtu kusů, kauce i ceny u aktivní nebo čekající výpůjčky
+  Vrácenou výpůjčku lze tlačítkem „Vrátit zpět" vrátit mezi aktivní (pro
+  případ omylu). Dále stav úhrady (nezaplaceno/záloha/zaplaceno), editace
+  termínu/počtu kusů/kauce/ceny u aktivní nebo čekající výpůjčky a smazání
+  výpůjčky v jakémkoli stavu (s potvrzením, pro opravu chybně založených
+  záznamů)
 - **Žádosti o rezervaci z veřejné stránky** — klient si na `/verejny-prehled`
   u volné pomůcky vybere termín a pošle žádost (jméno, telefon). V appce se
   objeví v „Nové žádosti o rezervaci" na Přehledu a v tabulce Výpůjček

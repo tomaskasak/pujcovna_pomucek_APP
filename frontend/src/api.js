@@ -52,6 +52,7 @@ export const api = {
   createReservation: (data) => request("/reservations", { method: "POST", body: JSON.stringify(data) }),
   updateReservation: (id, patch) => request(`/reservations/${id}`, { method: "PUT", body: JSON.stringify(patch) }),
   returnReservation: (id) => request(`/reservations/${id}/return`, { method: "PUT" }),
+  unreturnReservation: (id) => request(`/reservations/${id}/unreturn`, { method: "PUT" }),
   approveReservation: (id) => request(`/reservations/${id}/approve`, { method: "PUT" }),
   rejectReservation: (id) => request(`/reservations/${id}/reject`, { method: "PUT" }),
   deleteReservation: (id) => request(`/reservations/${id}`, { method: "DELETE" }),
