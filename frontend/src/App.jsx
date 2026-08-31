@@ -1182,12 +1182,16 @@ function ReservationModal({ clients, items, onClose, onSave }) {
   const [startDate, setStartDate] = useState(todayISO());
   const [endDate, setEndDate] = useState(todayISO());
   const [deposit, setDeposit] = useState("");
+  // null = cena se řídí ceníkem automaticky; jinak ruční přepis (např. domluvená sleva s klientem)
+  const [priceOverride, setPriceOverride] = useState(null);
 
   const selectedItem = rentable.find((i) => i.id === itemId);
   const qtyNum = Math.max(1, Number(quantity) || 1);
   const days = Math.max(1, daysBetween(startDate, endDate) + 1); // inclusive
   const rate = selectedItem ? effectiveRate(selectedItem, days) : 0;
-  const price = selectedItem ? days * qtyNum * rate : 0;
+  const computedPrice = selectedItem ? days * qtyNum * rate : 0;
+  const price = priceOverride !== null ? Number(priceOverride) || 0 : computedPrice;
+  const priceFieldValue = priceOverride !== null ? priceOverride : String(computedPrice);
 
   const canSave = clientId && itemId && startDate && endDate && endDate >= startDate && qtyNum <= (selectedItem?.availableQty || 0);
 
@@ -1232,11 +1236,23 @@ function ReservationModal({ clients, items, onClose, onSave }) {
 
           {selectedItem && (
             <div className="price-box">
-              <div className="price-row">{days} {days === 1 ? "den" : days < 5 ? "dny" : "dní"} × {qtyNum} ks × {czk(rate)}/den</div>
+              <div className="price-row">{days} {days === 1 ? "den" : days < 5 ? "dny" : "dní"} × {qtyNum} ks × {czk(rate)}/den (dle ceníku)</div>
               {selectedItem.priceTiers && selectedItem.priceTiers.length > 1 && (
                 <div className="price-row tier-applied">použita sazba pro {days}+ dní ({czk(rate)}/den)</div>
               )}
-              <div className="price-total">Celkem: <span className="mono">{czk(price)}</span></div>
+              <Field label="Cena k fakturaci (Kč)">
+                <input
+                  inputMode="numeric"
+                  className="mono"
+                  value={priceFieldValue}
+                  onChange={(e) => setPriceOverride(e.target.value.replace(/\D/g, ""))}
+                />
+              </Field>
+              {priceOverride !== null && Number(priceOverride) !== computedPrice && (
+                <button className="link-btn" onClick={() => setPriceOverride(null)}>
+                  Použít cenu dle ceníku ({czk(computedPrice)})
+                </button>
+              )}
               {qtyNum > selectedItem.availableQty && (
                 <div className="price-warn">K dispozici je jen {selectedItem.availableQty} ks.</div>
               )}
@@ -1273,13 +1289,16 @@ function EditReservationModal({ reservation, item, client, onClose, onSave }) {
   const [endDate, setEndDate] = useState(reservation?.endDate || todayISO());
   const [quantity, setQuantity] = useState(String(reservation?.quantity ?? "1"));
   const [deposit, setDeposit] = useState(String(reservation?.deposit ?? ""));
+  // vždy ruční pole, předvyplněné aktuální cenou — úprava termínu/kusů ho nikdy potichu nepřepíše
+  const [priceInput, setPriceInput] = useState(String(reservation?.price ?? "0"));
 
   if (!reservation) return null;
 
   const qtyNum = Math.max(1, Number(quantity) || 1);
   const days = Math.max(1, daysBetween(startDate, endDate) + 1);
   const rate = item ? effectiveRate(item, days) : 0;
-  const price = item ? days * qtyNum * rate : reservation.price;
+  const computedPrice = item ? days * qtyNum * rate : reservation.price;
+  const price = Number(priceInput) || 0;
 
   const canSave = startDate && endDate && endDate >= startDate && qtyNum > 0;
 
@@ -1306,16 +1325,21 @@ function EditReservationModal({ reservation, item, client, onClose, onSave }) {
         </Field>
       </div>
 
-      {item && (
-        <div className="price-box">
+      <div className="price-box">
+        {item && (
           <div className="price-row">
-            {days} {days === 1 ? "den" : days < 5 ? "dny" : "dní"} × {qtyNum} ks × {czk(rate)}/den
+            dle ceníku: {days} {days === 1 ? "den" : days < 5 ? "dny" : "dní"} × {qtyNum} ks × {czk(rate)}/den = {czk(computedPrice)}
           </div>
-          <div className="price-total">
-            Celkem: <span className="mono">{czk(price)}</span>
-          </div>
-        </div>
-      )}
+        )}
+        <Field label="Cena k fakturaci (Kč)">
+          <input inputMode="numeric" className="mono" value={priceInput} onChange={(e) => setPriceInput(e.target.value.replace(/\D/g, ""))} />
+        </Field>
+        {item && Number(priceInput) !== computedPrice && (
+          <button className="link-btn" onClick={() => setPriceInput(String(computedPrice))}>
+            Použít cenu dle ceníku ({czk(computedPrice)})
+          </button>
+        )}
+      </div>
 
       <div className="modal-actions">
         <button
@@ -1528,6 +1552,7 @@ export function Style() {
       .mini-list { display:flex; flex-direction:column; gap:5px; margin-top:8px; }
 
       .price-box { background:#F7F2E4; border:1px solid #E8E0C8; border-radius:10px; padding:12px 14px; margin: 4px 0 14px; }
+      .price-box .field { margin-top: 8px; margin-bottom: 6px; }
       .price-row { font-size:12px; color:#6B6555; }
       .price-total { font-family: Georgia, 'Times New Roman', serif; font-size:18px; font-weight:600; margin-top:4px; }
       .price-warn { font-size:12px; color:#B5482F; margin-top:6px; }
