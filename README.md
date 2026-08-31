@@ -123,12 +123,13 @@ celá appka běží na jednom portu (`PORT` z `.env`, výchozí 4000).
 - **Přihlašování** — appka je za jménem a heslem, session vydrží 180 dní
   (prohlížeč tě "pamatuje", nemusíš se přihlašovat pokaždé)
 - **Přehled** — souhrnné statistiky, upozornění na výpůjčky po termínu
-- **Klienti** — evidence klientů, nelze smazat klienta s (i historickou) výpůjčkou
+- **Klienti** — evidence klientů, editace údajů, nelze smazat klienta s (i historickou) výpůjčkou
 - **Pomůcky** — sklad s počty kusů, cenové úrovně dle délky zápůjčky (např.
   motodlaha: 250 Kč/den do 14 dnů, 230 Kč/den od 14 dnů, 200 Kč/den od 30 dnů),
   označení „v servisu", tlačítko pro načtení oficiálního ceníku
 - **Výpůjčky** — vytvoření/vrácení výpůjčky s automatickým výpočtem ceny,
-  stav úhrady (nezaplaceno/záloha/zaplaceno)
+  stav úhrady (nezaplaceno/záloha/zaplaceno), dodatečná editace termínu,
+  počtu kusů, kauce i ceny u aktivní nebo čekající výpůjčky
 - **Žádosti o rezervaci z veřejné stránky** — klient si na `/verejny-prehled`
   u volné pomůcky vybere termín a pošle žádost (jméno, telefon). V appce se
   objeví v „Nové žádosti o rezervaci" na Přehledu a v tabulce Výpůjček

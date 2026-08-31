@@ -20,6 +20,33 @@ router.post(
   })
 );
 
+router.put(
+  "/:id",
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { rows: existingRows } = await pool.query(`SELECT * FROM clients WHERE id = $1`, [id]);
+    if (existingRows.length === 0) {
+      return res.status(404).json({ error: "Klient nenalezen." });
+    }
+    const existing = existingRows[0];
+    const patch = req.body || {};
+
+    const name = patch.name !== undefined ? String(patch.name).trim() : existing.name;
+    if (!name) {
+      return res.status(400).json({ error: "Jméno klienta je povinné." });
+    }
+    const phone = patch.phone !== undefined ? patch.phone : existing.phone;
+    const address = patch.address !== undefined ? patch.address : existing.address;
+    const note = patch.note !== undefined ? patch.note : existing.note;
+
+    const { rows } = await pool.query(
+      `UPDATE clients SET name = $1, phone = $2, address = $3, note = $4 WHERE id = $5 RETURNING *`,
+      [name, phone || null, address || null, note || null, id]
+    );
+    res.json(mapClient(rows[0]));
+  })
+);
+
 router.delete(
   "/:id",
   asyncHandler(async (req, res) => {

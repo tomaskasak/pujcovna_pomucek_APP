@@ -36,6 +36,52 @@ router.post(
   })
 );
 
+// Úprava existující výpůjčky/žádosti (termín, počet kusů, kauce, cena).
+// Klient ani pomůcka se tu nemění — jen skutečné parametry výpůjčky.
+router.put(
+  "/:id",
+  asyncHandler(async (req, res) => {
+    const { rows: existingRows } = await pool.query(`SELECT * FROM reservations WHERE id = $1`, [req.params.id]);
+    if (existingRows.length === 0) {
+      return res.status(404).json({ error: "Výpůjčka nenalezena." });
+    }
+    const existing = existingRows[0];
+    const patch = req.body || {};
+
+    const quantity = patch.quantity !== undefined ? Math.max(1, Number(patch.quantity) || 1) : existing.quantity;
+    const startDate = patch.startDate !== undefined ? patch.startDate : existing.start_date;
+    const endDate = patch.endDate !== undefined ? patch.endDate : existing.end_date;
+    const deposit = patch.deposit !== undefined ? Number(patch.deposit) || 0 : existing.deposit;
+    const price = patch.price !== undefined ? Number(patch.price) || 0 : existing.price;
+
+    if (!startDate || !endDate || endDate < startDate) {
+      return res.status(400).json({ error: "Datum konce nesmí být před datem začátku." });
+    }
+
+    // mění-li se množství u aktivní/nevyřízené výpůjčky, ověřit dostupnost (bez počítání sebe sama)
+    if (quantity !== existing.quantity && (existing.status === "active" || existing.status === "pending")) {
+      const { rows: itemRows } = await pool.query(`SELECT quantity_total FROM items WHERE id = $1`, [existing.item_id]);
+      if (itemRows.length > 0) {
+        const { rows: otherRows } = await pool.query(
+          `SELECT COALESCE(SUM(quantity), 0) AS rented FROM reservations
+           WHERE item_id = $1 AND status IN ('active', 'pending') AND id != $2`,
+          [existing.item_id, req.params.id]
+        );
+        const availableQty = itemRows[0].quantity_total - Number(otherRows[0].rented);
+        if (quantity > availableQty) {
+          return res.status(409).json({ error: `K dispozici je jen ${availableQty} ks.` });
+        }
+      }
+    }
+
+    const { rows } = await pool.query(
+      `UPDATE reservations SET quantity = $1, start_date = $2, end_date = $3, deposit = $4, price = $5 WHERE id = $6 RETURNING *`,
+      [quantity, startDate, endDate, deposit, price, req.params.id]
+    );
+    res.json(mapReservation(rows[0]));
+  })
+);
+
 router.put(
   "/:id/return",
   asyncHandler(async (req, res) => {

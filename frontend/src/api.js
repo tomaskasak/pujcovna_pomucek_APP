@@ -41,6 +41,7 @@ export const api = {
   getState: () => request("/state"),
 
   createClient: (data) => request("/clients", { method: "POST", body: JSON.stringify(data) }),
+  updateClient: (id, patch) => request(`/clients/${id}`, { method: "PUT", body: JSON.stringify(patch) }),
   deleteClient: (id) => request(`/clients/${id}`, { method: "DELETE" }),
 
   createItem: (data) => request("/items", { method: "POST", body: JSON.stringify(data) }),
@@ -49,6 +50,7 @@ export const api = {
   seedPricelist: () => request("/items/seed-pricelist", { method: "POST" }),
 
   createReservation: (data) => request("/reservations", { method: "POST", body: JSON.stringify(data) }),
+  updateReservation: (id, patch) => request(`/reservations/${id}`, { method: "PUT", body: JSON.stringify(patch) }),
   returnReservation: (id) => request(`/reservations/${id}/return`, { method: "PUT" }),
   approveReservation: (id) => request(`/reservations/${id}/approve`, { method: "PUT" }),
   rejectReservation: (id) => request(`/reservations/${id}/reject`, { method: "PUT" }),

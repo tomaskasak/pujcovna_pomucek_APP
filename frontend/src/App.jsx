@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
-import { Users, PackageSearch, CalendarClock, Wallet, Plus, X, Check, AlertTriangle, Search, Trash2, Globe, LogOut } from "lucide-react";
+import { Users, PackageSearch, CalendarClock, Wallet, Plus, X, Check, AlertTriangle, Search, Trash2, Globe, LogOut, Pencil } from "lucide-react";
 import { api, onUnauthorized } from "./api.js";
 
 const STATUS = {
@@ -201,6 +201,16 @@ export default function App() {
       showToast(e.message || "Klienta se nepodařilo smazat.");
     }
   };
+  const updateClient = async (id, patch) => {
+    try {
+      const updated = await api.updateClient(id, patch);
+      setData((d) => ({ ...d, clients: d.clients.map((c) => (c.id === id ? updated : c)) }));
+      return true;
+    } catch (e) {
+      showToast(e.message);
+      return false;
+    }
+  };
 
   const addItem = async (it) => {
     try {
@@ -256,6 +266,16 @@ export default function App() {
     try {
       const created = await api.createReservation(r);
       setData((d) => ({ ...d, reservations: [...d.reservations, created] }));
+      return true;
+    } catch (e) {
+      showToast(e.message);
+      return false;
+    }
+  };
+  const updateReservation = async (id, patch) => {
+    try {
+      const updated = await api.updateReservation(id, patch);
+      setData((d) => ({ ...d, reservations: d.reservations.map((r) => (r.id === id ? updated : r)) }));
       return true;
     } catch (e) {
       showToast(e.message);
@@ -500,13 +520,20 @@ export default function App() {
                         <div className="card-title">{c.name}</div>
                         <div className="card-sub mono">{c.phone || "bez telefonu"}</div>
                       </div>
-                      <button className="icon-btn danger" onClick={() => removeClient(c.id)}>
-                        <Trash2 size={16} />
-                      </button>
                     </div>
                     {c.address && <div className="card-line">{c.address}</div>}
                     {c.note && <div className="card-note">{c.note}</div>}
-                    <div className="card-foot">{active > 0 ? `${active} aktivní výpůjčka/y` : "žádná aktivní výpůjčka"}</div>
+                    <div className="card-foot-actions">
+                      <span className="card-foot">{active > 0 ? `${active} aktivní výpůjčka/y` : "žádná aktivní výpůjčka"}</span>
+                      <span style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                        <button className="link-btn" onClick={() => setModal({ type: "client", editId: c.id })}>
+                          Upravit
+                        </button>
+                        <button className="icon-btn danger" onClick={() => removeClient(c.id)}>
+                          <Trash2 size={16} />
+                        </button>
+                      </span>
+                    </div>
                   </div>
                 );
               })}
@@ -622,26 +649,37 @@ export default function App() {
                             )}
                           </td>
                           <td>
-                            {r.status === "active" && (
-                              <button className="link-btn" onClick={() => returnReservation(r.id)}>
-                                <Check size={14} /> Vrátit
-                              </button>
-                            )}
-                            {r.status === "pending" && (
-                              <div className="row-actions">
-                                <button className="link-btn" onClick={() => approveReservation(r.id)}>
-                                  <Check size={14} /> Schválit
+                            <div className="row-actions">
+                              {r.status === "active" && (
+                                <button className="link-btn" onClick={() => returnReservation(r.id)}>
+                                  <Check size={14} /> Vrátit
                                 </button>
-                                <button className="link-btn link-btn-danger" onClick={() => rejectReservation(r.id)}>
-                                  Zamítnout
+                              )}
+                              {r.status === "pending" && (
+                                <>
+                                  <button className="link-btn" onClick={() => approveReservation(r.id)}>
+                                    <Check size={14} /> Schválit
+                                  </button>
+                                  <button className="link-btn link-btn-danger" onClick={() => rejectReservation(r.id)}>
+                                    Zamítnout
+                                  </button>
+                                </>
+                              )}
+                              {(r.status === "active" || r.status === "pending") && (
+                                <button
+                                  className="icon-btn"
+                                  onClick={() => setModal({ type: "reservation-edit", editId: r.id })}
+                                  title="Upravit výpůjčku"
+                                >
+                                  <Pencil size={14} />
                                 </button>
-                              </div>
-                            )}
-                            {r.status === "rejected" && (
-                              <button className="icon-btn danger" onClick={() => deleteReservation(r.id)} title="Smazat žádost">
-                                <Trash2 size={14} />
-                              </button>
-                            )}
+                              )}
+                              {r.status === "rejected" && (
+                                <button className="icon-btn danger" onClick={() => deleteReservation(r.id)} title="Smazat žádost">
+                                  <Trash2 size={14} />
+                                </button>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       );
@@ -699,13 +737,18 @@ export default function App() {
 
       {modal?.type === "client" && (
         <ClientModal
+          initial={modal.editId ? data.clients.find((c) => c.id === modal.editId) : null}
           onClose={() => setModal(null)}
           onSave={async (c) => {
-            const ok = await addClient(c);
-            if (ok) {
-              setModal(null);
-              showToast("Klient přidán");
+            let ok;
+            if (modal.editId) {
+              ok = await updateClient(modal.editId, c);
+              if (ok) showToast("Klient upraven");
+            } else {
+              ok = await addClient(c);
+              if (ok) showToast("Klient přidán");
             }
+            if (ok) setModal(null);
           }}
         />
       )}
@@ -736,6 +779,21 @@ export default function App() {
             if (ok) {
               setModal(null);
               showToast("Výpůjčka vytvořena");
+            }
+          }}
+        />
+      )}
+      {modal?.type === "reservation-edit" && (
+        <EditReservationModal
+          reservation={data.reservations.find((r) => r.id === modal.editId)}
+          item={data.items.find((i) => i.id === data.reservations.find((r) => r.id === modal.editId)?.itemId)}
+          client={clientById(data.reservations.find((r) => r.id === modal.editId)?.clientId)}
+          onClose={() => setModal(null)}
+          onSave={async (patch) => {
+            const ok = await updateReservation(modal.editId, patch);
+            if (ok) {
+              setModal(null);
+              showToast("Výpůjčka upravena");
             }
           }}
         />
@@ -1013,13 +1071,13 @@ function Dashboard({ stats, items, clients, reservations, onGoto, onApprove, onR
   );
 }
 
-function ClientModal({ onClose, onSave }) {
-  const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [address, setAddress] = useState("");
-  const [note, setNote] = useState("");
+function ClientModal({ onClose, onSave, initial }) {
+  const [name, setName] = useState(initial?.name || "");
+  const [phone, setPhone] = useState(initial?.phone || "");
+  const [address, setAddress] = useState(initial?.address || "");
+  const [note, setNote] = useState(initial?.note || "");
   return (
-    <Modal title="Nový klient" onClose={onClose}>
+    <Modal title={initial ? "Upravit klienta" : "Nový klient"} onClose={onClose}>
       <Field label="Jméno a příjmení *">
         <input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Jana Nováková" />
       </Field>
@@ -1034,7 +1092,7 @@ function ClientModal({ onClose, onSave }) {
       </Field>
       <div className="modal-actions">
         <button className="btn btn-primary" disabled={!name.trim()} onClick={() => onSave({ name: name.trim(), phone, address, note })}>
-          Uložit klienta
+          {initial ? "Uložit změny" : "Uložit klienta"}
         </button>
       </div>
     </Modal>
@@ -1206,6 +1264,68 @@ function ReservationModal({ clients, items, onClose, onSave }) {
           </div>
         </>
       )}
+    </Modal>
+  );
+}
+
+function EditReservationModal({ reservation, item, client, onClose, onSave }) {
+  const [startDate, setStartDate] = useState(reservation?.startDate || todayISO());
+  const [endDate, setEndDate] = useState(reservation?.endDate || todayISO());
+  const [quantity, setQuantity] = useState(String(reservation?.quantity ?? "1"));
+  const [deposit, setDeposit] = useState(String(reservation?.deposit ?? ""));
+
+  if (!reservation) return null;
+
+  const qtyNum = Math.max(1, Number(quantity) || 1);
+  const days = Math.max(1, daysBetween(startDate, endDate) + 1);
+  const rate = item ? effectiveRate(item, days) : 0;
+  const price = item ? days * qtyNum * rate : reservation.price;
+
+  const canSave = startDate && endDate && endDate >= startDate && qtyNum > 0;
+
+  return (
+    <Modal title="Upravit výpůjčku" onClose={onClose}>
+      <div className="card-sub" style={{ marginBottom: 14 }}>
+        {client?.name || "—"} · {item?.name || "—"}
+      </div>
+
+      <div className="field-row">
+        <Field label="Počet kusů">
+          <input inputMode="numeric" value={quantity} onChange={(e) => setQuantity(e.target.value.replace(/\D/g, ""))} />
+        </Field>
+        <Field label="Kauce (Kč)">
+          <input inputMode="numeric" value={deposit} onChange={(e) => setDeposit(e.target.value.replace(/\D/g, ""))} placeholder="500" />
+        </Field>
+      </div>
+      <div className="field-row">
+        <Field label="Od *">
+          <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+        </Field>
+        <Field label="Do *">
+          <input type="date" min={startDate} value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+        </Field>
+      </div>
+
+      {item && (
+        <div className="price-box">
+          <div className="price-row">
+            {days} {days === 1 ? "den" : days < 5 ? "dny" : "dní"} × {qtyNum} ks × {czk(rate)}/den
+          </div>
+          <div className="price-total">
+            Celkem: <span className="mono">{czk(price)}</span>
+          </div>
+        </div>
+      )}
+
+      <div className="modal-actions">
+        <button
+          className="btn btn-primary"
+          disabled={!canSave}
+          onClick={() => onSave({ quantity: qtyNum, startDate, endDate, deposit: Number(deposit) || 0, price })}
+        >
+          Uložit změny
+        </button>
+      </div>
     </Modal>
   );
 }
