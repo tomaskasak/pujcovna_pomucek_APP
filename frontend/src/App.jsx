@@ -428,10 +428,10 @@ export default function App() {
       <Style />
       <aside className="sidebar">
         <div className="brand">
-          <div className="brand-mark">R</div>
+          <img className="brand-mark" src="/icon-512.png" alt="REHARENT Krkonoše" />
           <div>
-            <div className="brand-title">Půjčovna</div>
-            <div className="brand-sub">rehabilitační pomůcky</div>
+            <div className="brand-title">REHARENT Krkonoše</div>
+            <div className="brand-sub">Půjčovna pomůcek</div>
           </div>
         </div>
         <nav className="nav">
@@ -865,10 +865,10 @@ function LoginScreen({ onLoggedIn }) {
       <Style />
       <form className="login-card" onSubmit={handleSubmit}>
         <div className="login-brand">
-          <div className="brand-mark">R</div>
+          <img className="brand-mark" src="/icon-512.png" alt="REHARENT Krkonoše" />
           <div>
-            <div className="brand-title" style={{ color: "#20281F" }}>Půjčovna</div>
-            <div className="card-sub">rehabilitační pomůcky</div>
+            <div className="brand-title" style={{ color: "#20281F" }}>REHARENT Krkonoše</div>
+            <div className="card-sub">Půjčovna pomůcek</div>
           </div>
         </div>
 
@@ -1449,8 +1449,8 @@ export function Style() {
       }
       .brand { display:flex; align-items:center; gap:10px; padding: 4px 8px 22px; }
       .brand-mark {
-        width:34px; height:34px; border-radius:8px; background:#E0A343; color:#2F5D3F;
-        display:flex; align-items:center; justify-content:center; font-family: Georgia, 'Times New Roman', serif; font-weight:600; font-size:18px;
+        width:40px; height:40px; border-radius:9px; background:#fff; padding:3px;
+        object-fit:contain; flex-shrink:0;
       }
       .brand-title { font-family: Georgia, 'Times New Roman', serif; font-weight:600; font-size:15px; line-height:1.2; }
       .brand-sub { font-size:11px; color:#C7D9C0; letter-spacing:.02em; }
@@ -1609,6 +1609,7 @@ export function Style() {
         width:100%; max-width:340px; color-scheme:light;
       }
       .login-brand { display:flex; align-items:center; gap:10px; margin-bottom:22px; }
+      .login-brand .brand-mark { width:52px; height:52px; border-radius:11px; padding:4px; }
       .login-error {
         font-size:12.5px; color:#B5482F; background:#FAECE7; border:1px solid #F0CFC4;
         border-radius:8px; padding:8px 10px; margin-bottom:12px;
