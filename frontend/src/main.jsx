@@ -10,3 +10,13 @@ const isPublicRoute = window.location.pathname.replace(/\/+$/, "") === "/verejny
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>{isPublicRoute ? <PublicPage /> : <App />}</React.StrictMode>
 );
+
+// Registrace service workeru — umožňuje appce nabídnout se na Androidu jako
+// instalovatelná (ikona na ploše, spuštění bez adresního řádku prohlížeče).
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch(() => {
+      // instalace jako PWA prostě nebude nabídnuta — appka funguje dál normálně v prohlížeči
+    });
+  });
+}

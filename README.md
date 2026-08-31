@@ -118,6 +118,22 @@ npm start
 Backend automaticky servíruje sestavený frontend z `frontend/dist`, takže
 celá appka běží na jednom portu (`PORT` z `.env`, výchozí 4000).
 
+## Přidání ikony na plochu (Android)
+
+Appka je nastavená jako instalovatelná PWA (manifest + ikony + service
+worker), takže si ji lze přidat na plochu telefonu jako normální appku —
+spustí se bez adresního řádku prohlížeče.
+
+1. Otevři appku v Chromu na Androidu
+2. Klepni na nabídku (tři tečky vpravo nahoře)
+3. Zvol **„Přidat na plochu"** nebo **„Instalovat aplikaci"** (Chrome to
+   někdy nabídne i sám automaticky bannerem dole)
+4. Potvrď — na ploše přibude ikonka ve stejném stylu jako logo appky
+   (oranžový čtverec s „R")
+
+Totéž funguje i pro veřejnou stránku `/verejny-prehled` — pokud si ji
+klient přidá na plochu, otevře se mu rovnou přehled dostupnosti.
+
 ## Funkce aplikace
 
 - **Přihlašování** — appka je za jménem a heslem, session vydrží 180 dní
