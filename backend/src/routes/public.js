@@ -3,6 +3,7 @@ import { pool } from "../db.js";
 import { asyncHandler } from "../asyncHandler.js";
 import { mapReservation } from "../mappers.js";
 import { effectiveRate, daysBetween } from "../pricing.js";
+import { notifyNewReservationRequest } from "../mailer.js";
 
 const router = Router();
 
@@ -94,6 +95,17 @@ router.post(
       [clientId, itemId, qty, startDate, endDate, price]
     );
     res.status(201).json(mapReservation(rows[0]));
+
+    // Notifikace mailem se posílá až po odpovědi klientovi — nesmí zpomalit ani
+    // shodit odeslání žádosti, pokud by e-mail selhal.
+    notifyNewReservationRequest({
+      clientName: clientName.trim(),
+      clientPhone: clientPhone.trim(),
+      itemName: item.name,
+      startDate,
+      endDate,
+      quantity: qty,
+    });
   })
 );
 

@@ -157,10 +157,49 @@ klient přidá na plochu, otevře se mu rovnou přehled dostupnosti.
   (s odznakem u položky Výpůjčky v menu) ke schválení nebo zamítnutí.
   Schválená žádost se stane normální aktivní výpůjčkou. Dokud žádost čeká
   na vyřízení, pomůcka se na veřejné stránce zobrazuje jako nedostupná
-  (aby ji nemohl žádat víc lidí najednou).
+  (aby ji nemohl žádat víc lidí najednou). Volitelně appka na každou novou
+  žádost pošle i upozornění e-mailem (viz níže).
 - **Platby** — evidence plateb, export do CSV
 - **Veřejný přehled** — read-only náhled dostupnosti pomůcek bez cen klientů,
   s možností poslat žádost o rezervaci
+
+## E-mailové upozornění na novou žádost o rezervaci
+
+Appka umí při každé nové žádosti o rezervaci z veřejné stránky poslat
+upozorňovací e-mail. Je to **volitelné** — bez vyplnění appka funguje úplně
+stejně, jen notifikaci neposílá (a odeslání žádosti to nijak nezpomalí ani
+nezablokuje, i kdyby mail selhal).
+
+Zapíná se vyplněním proměnných v `.env` (lokálně) nebo v **Render → služba
+`pujcovna-backend` → Environment** (na ostrém provozu):
+
+```
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=tvoje-adresa@gmail.com
+SMTP_PASS=heslo-aplikace       # NE běžné heslo do Gmailu, viz níže
+SMTP_FROM=tvoje-adresa@gmail.com
+NOTIFY_EMAIL_TO=kam-chces-posilat-upozorneni@gmail.com
+```
+
+**Nejjednodušší cesta — poslat přes Gmail:**
+
+1. Na [myaccount.google.com/security](https://myaccount.google.com/security)
+   zapni **dvoufázové ověření** (bez něj aplikační hesla nejdou vytvořit).
+2. Na [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords)
+   vytvoř nové **heslo aplikace** (App password) — zadej libovolný název
+   (např. „Půjčovna"), Google ti vygeneruje 16místné heslo.
+3. Toto heslo (ne svoje běžné heslo do Gmailu!) vyplň do `SMTP_PASS`.
+4. `SMTP_USER` i `SMTP_FROM` je tvá gmailová adresa, `NOTIFY_EMAIL_TO` adresa,
+   kam se mají upozornění posílat (klidně stejná).
+
+**Alternativa — poslat přes schránku na Wedosu:** SMTP údaje (server, port)
+najdeš ve Wedos klientské zóně u dané domény/e-mailu (obvykle
+`smtp.wedos.net`, port `587`), `SMTP_USER`/`SMTP_PASS` jsou přihlašovací
+údaje té schránky.
+
+Po vyplnění na Renderu appku není potřeba znovu nasazovat — nové proměnné se
+projeví při příštím restartu služby (Render to po uložení udělá sám).
 
 ## Přihlašování — jak přidat další účet
 
