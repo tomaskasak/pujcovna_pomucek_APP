@@ -282,12 +282,14 @@ export default function App() {
       return false;
     }
   };
-  const returnReservation = async (id) => {
+  const returnReservation = async (id, finalize) => {
     try {
-      const updated = await api.returnReservation(id);
+      const updated = await api.returnReservation(id, finalize);
       setData((d) => ({ ...d, reservations: d.reservations.map((r) => (r.id === id ? updated : r)) }));
+      return true;
     } catch (e) {
       showToast(e.message);
+      return false;
     }
   };
   const unreturnReservation = async (id) => {
@@ -579,7 +581,7 @@ export default function App() {
                         const overdue = r.endDate && r.endDate < todayISO();
                         return (
                           <div key={r.id} className={"card-note" + (overdue ? " warn" : "")}>
-                            {clientById(r.clientId)?.name || "neznámý klient"} · {r.quantity || 1}× · do {fmtDate(r.endDate)}
+                            {clientById(r.clientId)?.name || "neznámý klient"} · {r.quantity || 1}× · {r.endDate ? `do ${fmtDate(r.endDate)}` : "datum vrácení otevřené"}
                           </div>
                         );
                       })}
@@ -624,6 +626,11 @@ export default function App() {
                       const client = clientById(r.clientId);
                       const overdue = r.status === "active" && r.endDate && r.endDate < todayISO();
                       const st = overdue ? "overdue" : r.status === "active" ? "rented" : r.status;
+                      const openEndedActive = r.status === "active" && !r.endDate;
+                      // u flexibilní (dosud neukončené) výpůjčky appka průběžně počítá odhad ceny k dnešnímu dni
+                      const daysSoFar = openEndedActive ? Math.max(1, daysBetween(r.startDate, todayISO()) + 1) : null;
+                      const estimatedPrice =
+                        openEndedActive && item ? daysSoFar * (r.quantity || 1) * effectiveRate(item, daysSoFar) : null;
                       return (
                         <tr key={r.id}>
                           <td>
@@ -632,8 +639,19 @@ export default function App() {
                           </td>
                           <td>{item?.name || "—"}{r.quantity > 1 ? ` ×${r.quantity}` : ""}</td>
                           <td className="mono">{fmtDate(r.startDate)}</td>
-                          <td className="mono">{fmtDate(r.endDate)}</td>
-                          <td className="mono">{czk(r.price)}</td>
+                          <td className="mono">
+                            {openEndedActive ? <span className="tier-applied">otevřeno ({daysSoFar}. den)</span> : fmtDate(r.endDate)}
+                          </td>
+                          <td className="mono">
+                            {estimatedPrice !== null ? (
+                              <>
+                                ~{czk(estimatedPrice)}
+                                <div className="table-subtext">odhad k dnešku</div>
+                              </>
+                            ) : (
+                              czk(r.price)
+                            )}
+                          </td>
                           <td>
                             {r.status === "pending" || r.status === "rejected" ? (
                               "—"
@@ -661,7 +679,12 @@ export default function App() {
                           <td>
                             <div className="row-actions">
                               {r.status === "active" && (
-                                <button className="link-btn" onClick={() => returnReservation(r.id)}>
+                                <button
+                                  className="link-btn"
+                                  onClick={() =>
+                                    r.endDate ? returnReservation(r.id) : setModal({ type: "reservation-return", editId: r.id })
+                                  }
+                                >
                                   <Check size={14} /> Vrátit
                                 </button>
                               )}
@@ -807,6 +830,21 @@ export default function App() {
             if (ok) {
               setModal(null);
               showToast("Výpůjčka upravena");
+            }
+          }}
+        />
+      )}
+      {modal?.type === "reservation-return" && (
+        <ReturnReservationModal
+          reservation={data.reservations.find((r) => r.id === modal.editId)}
+          item={data.items.find((i) => i.id === data.reservations.find((r) => r.id === modal.editId)?.itemId)}
+          client={clientById(data.reservations.find((r) => r.id === modal.editId)?.clientId)}
+          onClose={() => setModal(null)}
+          onSave={async (finalize) => {
+            const ok = await returnReservation(modal.editId, finalize);
+            if (ok) {
+              setModal(null);
+              showToast("Výpůjčka ukončena");
             }
           }}
         />
@@ -1194,19 +1232,23 @@ function ReservationModal({ clients, items, onClose, onSave }) {
   const [quantity, setQuantity] = useState("1");
   const [startDate, setStartDate] = useState(todayISO());
   const [endDate, setEndDate] = useState(todayISO());
+  // klient často předem neví, kdy pomůcku vrátí — pak se datum "Do" nevyplňuje
+  // a cena se do ukončení výpůjčky počítá jen jako odhad k dnešnímu dni
+  const [openEnded, setOpenEnded] = useState(false);
   const [deposit, setDeposit] = useState("");
   // null = cena se řídí ceníkem automaticky; jinak ruční přepis (např. domluvená sleva s klientem)
   const [priceOverride, setPriceOverride] = useState(null);
 
   const selectedItem = rentable.find((i) => i.id === itemId);
   const qtyNum = Math.max(1, Number(quantity) || 1);
-  const days = Math.max(1, daysBetween(startDate, endDate) + 1); // inclusive
+  const days = Math.max(1, daysBetween(startDate, openEnded ? todayISO() : endDate) + 1); // inclusive
   const rate = selectedItem ? effectiveRate(selectedItem, days) : 0;
   const computedPrice = selectedItem ? days * qtyNum * rate : 0;
   const price = priceOverride !== null ? Number(priceOverride) || 0 : computedPrice;
   const priceFieldValue = priceOverride !== null ? priceOverride : String(computedPrice);
 
-  const canSave = clientId && itemId && startDate && endDate && endDate >= startDate && qtyNum <= (selectedItem?.availableQty || 0);
+  const canSave =
+    clientId && itemId && startDate && (openEnded || (endDate && endDate >= startDate)) && qtyNum <= (selectedItem?.availableQty || 0);
 
   return (
     <Modal title="Nová výpůjčka" onClose={onClose}>
@@ -1240,15 +1282,30 @@ function ReservationModal({ clients, items, onClose, onSave }) {
               <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
             </Field>
             <Field label="Do *">
-              <input type="date" min={startDate} value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+              <input
+                type="date"
+                min={startDate}
+                value={endDate}
+                disabled={openEnded}
+                onChange={(e) => setEndDate(e.target.value)}
+              />
             </Field>
           </div>
+          <label className="checkbox-row">
+            <input type="checkbox" checked={openEnded} onChange={(e) => setOpenEnded(e.target.checked)} />
+            Datum vrácení zatím neznámé (klient si o termínu není jistý)
+          </label>
           <Field label="Kauce (Kč)">
             <input inputMode="numeric" value={deposit} onChange={(e) => setDeposit(e.target.value.replace(/\D/g, ""))} placeholder="500" />
           </Field>
 
           {selectedItem && (
             <div className="price-box">
+              {openEnded && (
+                <div className="price-row tier-applied">
+                  odhad k dnešnímu dni — appka bude počítat dál, dokud výpůjčku neukončíš
+                </div>
+              )}
               <div className="price-row">{days} {days === 1 ? "den" : days < 5 ? "dny" : "dní"} × {qtyNum} ks × {czk(rate)}/den (dle ceníku)</div>
               {selectedItem.priceTiers && selectedItem.priceTiers.length > 1 && (
                 <div className="price-row tier-applied">použita sazba pro {days}+ dní ({czk(rate)}/den)</div>
@@ -1282,7 +1339,7 @@ function ReservationModal({ clients, items, onClose, onSave }) {
                   itemId,
                   quantity: qtyNum,
                   startDate,
-                  endDate,
+                  endDate: openEnded ? null : endDate,
                   deposit: Number(deposit) || 0,
                   price,
                 })
@@ -1300,6 +1357,7 @@ function ReservationModal({ clients, items, onClose, onSave }) {
 function EditReservationModal({ reservation, item, client, onClose, onSave }) {
   const [startDate, setStartDate] = useState(reservation?.startDate || todayISO());
   const [endDate, setEndDate] = useState(reservation?.endDate || todayISO());
+  const [openEnded, setOpenEnded] = useState(!reservation?.endDate);
   const [quantity, setQuantity] = useState(String(reservation?.quantity ?? "1"));
   const [deposit, setDeposit] = useState(String(reservation?.deposit ?? ""));
   // vždy ruční pole, předvyplněné aktuální cenou — úprava termínu/kusů ho nikdy potichu nepřepíše
@@ -1308,12 +1366,12 @@ function EditReservationModal({ reservation, item, client, onClose, onSave }) {
   if (!reservation) return null;
 
   const qtyNum = Math.max(1, Number(quantity) || 1);
-  const days = Math.max(1, daysBetween(startDate, endDate) + 1);
+  const days = Math.max(1, daysBetween(startDate, openEnded ? todayISO() : endDate) + 1);
   const rate = item ? effectiveRate(item, days) : 0;
   const computedPrice = item ? days * qtyNum * rate : reservation.price;
   const price = Number(priceInput) || 0;
 
-  const canSave = startDate && endDate && endDate >= startDate && qtyNum > 0;
+  const canSave = startDate && (openEnded || (endDate && endDate >= startDate)) && qtyNum > 0;
 
   return (
     <Modal title="Upravit výpůjčku" onClose={onClose}>
@@ -1334,11 +1392,24 @@ function EditReservationModal({ reservation, item, client, onClose, onSave }) {
           <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
         </Field>
         <Field label="Do *">
-          <input type="date" min={startDate} value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+          <input
+            type="date"
+            min={startDate}
+            value={endDate}
+            disabled={openEnded}
+            onChange={(e) => setEndDate(e.target.value)}
+          />
         </Field>
       </div>
+      <label className="checkbox-row">
+        <input type="checkbox" checked={openEnded} onChange={(e) => setOpenEnded(e.target.checked)} />
+        Datum vrácení zatím neznámé (klient si o termínu není jistý)
+      </label>
 
       <div className="price-box">
+        {openEnded && (
+          <div className="price-row tier-applied">odhad k dnešnímu dni — appka bude počítat dál, dokud výpůjčku neukončíš</div>
+        )}
         {item && (
           <div className="price-row">
             dle ceníku: {days} {days === 1 ? "den" : days < 5 ? "dny" : "dní"} × {qtyNum} ks × {czk(rate)}/den = {czk(computedPrice)}
@@ -1358,9 +1429,81 @@ function EditReservationModal({ reservation, item, client, onClose, onSave }) {
         <button
           className="btn btn-primary"
           disabled={!canSave}
-          onClick={() => onSave({ quantity: qtyNum, startDate, endDate, deposit: Number(deposit) || 0, price })}
+          onClick={() =>
+            onSave({ quantity: qtyNum, startDate, endDate: openEnded ? null : endDate, deposit: Number(deposit) || 0, price })
+          }
         >
           Uložit změny
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+// Ukončení flexibilní výpůjčky bez pevného data vrácení — obsluha teď doplní
+// skutečné datum vrácení a potvrdí (nebo ručně upraví) finální cenu.
+function ReturnReservationModal({ reservation, item, client, onClose, onSave }) {
+  const [endDate, setEndDate] = useState(todayISO());
+  const [priceInput, setPriceInput] = useState("0");
+  const [priceTouched, setPriceTouched] = useState(false);
+
+  const days = Math.max(1, daysBetween(reservation?.startDate || todayISO(), endDate) + 1);
+  const rate = item ? effectiveRate(item, days) : 0;
+  const computedPrice = item ? days * (reservation?.quantity || 1) * rate : reservation?.price || 0;
+
+  // dokud cenu nikdo ručně nezměnil, ať sleduje přepočet podle zvoleného data vrácení
+  useEffect(() => {
+    if (!priceTouched) setPriceInput(String(computedPrice));
+  }, [computedPrice, priceTouched]);
+
+  if (!reservation) return null;
+
+  const price = Number(priceInput) || 0;
+  const canSave = endDate && endDate >= reservation.startDate;
+
+  return (
+    <Modal title="Ukončit výpůjčku" onClose={onClose}>
+      <div className="card-sub" style={{ marginBottom: 14 }}>
+        {client?.name || "—"} · {item?.name || "—"} · od {fmtDate(reservation.startDate)}
+      </div>
+
+      <Field label="Skutečné datum vrácení *">
+        <input type="date" min={reservation.startDate} value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+      </Field>
+
+      <div className="price-box">
+        {item && (
+          <div className="price-row">
+            dle ceníku: {days} {days === 1 ? "den" : days < 5 ? "dny" : "dní"} × {reservation.quantity || 1} ks × {czk(rate)}/den = {czk(computedPrice)}
+          </div>
+        )}
+        <Field label="Cena k fakturaci (Kč)">
+          <input
+            inputMode="numeric"
+            className="mono"
+            value={priceInput}
+            onChange={(e) => {
+              setPriceTouched(true);
+              setPriceInput(e.target.value.replace(/\D/g, ""));
+            }}
+          />
+        </Field>
+        {item && price !== computedPrice && (
+          <button
+            className="link-btn"
+            onClick={() => {
+              setPriceTouched(false);
+              setPriceInput(String(computedPrice));
+            }}
+          >
+            Použít cenu dle ceníku ({czk(computedPrice)})
+          </button>
+        )}
+      </div>
+
+      <div className="modal-actions">
+        <button className="btn btn-primary" disabled={!canSave} onClick={() => onSave({ endDate, price })}>
+          Ukončit a vrátit
         </button>
       </div>
     </Modal>
@@ -1571,6 +1714,11 @@ export function Style() {
       .price-warn { font-size:12px; color:#B5482F; margin-top:6px; }
       .tier-applied { color:#2F5D3F; font-weight:600; margin-top:2px; }
       .tier-hint { color:#8C8470; font-weight:400; }
+      .checkbox-row {
+        display:flex; align-items:center; gap:8px; font-size:12.5px; color:#6B6555;
+        margin: -4px 0 14px;
+      }
+      .checkbox-row input { margin:0; }
 
       .tiers-box { background:#F7F2E4; border:1px solid #E8E0C8; border-radius:10px; padding:10px 12px; margin-bottom:14px; }
       .tier-row { display:flex; align-items:center; gap:8px; margin-bottom:8px; }

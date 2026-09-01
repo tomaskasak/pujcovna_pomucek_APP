@@ -39,7 +39,9 @@ CREATE TABLE IF NOT EXISTS reservations (
   item_id UUID REFERENCES items(id) ON DELETE SET NULL,
   quantity INTEGER NOT NULL DEFAULT 1,
   start_date DATE NOT NULL,
-  end_date DATE NOT NULL,
+  -- NULL = datum vrácení zatím není známé (flexibilní výpůjčka) — cena se do
+  -- ukončení počítá odhadem podle dní k dnešnímu dni, viz frontend
+  end_date DATE,
   deposit INTEGER NOT NULL DEFAULT 0,
   price INTEGER NOT NULL DEFAULT 0,
   -- pending/rejected = žádost podaná z veřejné stránky, čeká na vyřízení obsluhou
@@ -53,6 +55,10 @@ CREATE TABLE IF NOT EXISTS reservations (
 -- (constraint bez explicitního jména dostal od PostgreSQL výchozí název reservations_status_check).
 ALTER TABLE reservations DROP CONSTRAINT IF EXISTS reservations_status_check;
 ALTER TABLE reservations ADD CONSTRAINT reservations_status_check CHECK (status IN ('pending', 'active', 'returned', 'rejected'));
+
+-- Umožnit flexibilní výpůjčky bez pevného data vrácení i v databázi založené
+-- před touto verzí (end_date původně NOT NULL).
+ALTER TABLE reservations ALTER COLUMN end_date DROP NOT NULL;
 
 CREATE TABLE IF NOT EXISTS payments (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

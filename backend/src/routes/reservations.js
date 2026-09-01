@@ -9,8 +9,12 @@ router.post(
   "/",
   asyncHandler(async (req, res) => {
     const { clientId, itemId, quantity, startDate, endDate, deposit, price } = req.body || {};
-    if (!clientId || !itemId || !startDate || !endDate || endDate < startDate) {
+    if (!clientId || !itemId || !startDate) {
       return res.status(400).json({ error: "Chybí povinné údaje výpůjčky." });
+    }
+    // endDate je nepovinné — nevyplněné = flexibilní výpůjčka bez pevného data vrácení
+    if (endDate && endDate < startDate) {
+      return res.status(400).json({ error: "Datum konce nesmí být před datem začátku." });
     }
 
     const { rows: itemRows } = await pool.query(`SELECT quantity_total FROM items WHERE id = $1`, [itemId]);
@@ -30,7 +34,7 @@ router.post(
     const { rows } = await pool.query(
       `INSERT INTO reservations (client_id, item_id, quantity, start_date, end_date, deposit, price, status, payment_status)
        VALUES ($1, $2, $3, $4, $5, $6, $7, 'active', 'nezaplaceno') RETURNING *`,
-      [clientId, itemId, qty, startDate, endDate, Number(deposit) || 0, Number(price) || 0]
+      [clientId, itemId, qty, startDate, endDate || null, Number(deposit) || 0, Number(price) || 0]
     );
     res.status(201).json(mapReservation(rows[0]));
   })
@@ -50,11 +54,15 @@ router.put(
 
     const quantity = patch.quantity !== undefined ? Math.max(1, Number(patch.quantity) || 1) : existing.quantity;
     const startDate = patch.startDate !== undefined ? patch.startDate : existing.start_date;
-    const endDate = patch.endDate !== undefined ? patch.endDate : existing.end_date;
+    // endDate je nepovinné — nevyplněné/null = flexibilní výpůjčka bez pevného data vrácení
+    const endDate = patch.endDate !== undefined ? patch.endDate || null : existing.end_date;
     const deposit = patch.deposit !== undefined ? Number(patch.deposit) || 0 : existing.deposit;
     const price = patch.price !== undefined ? Number(patch.price) || 0 : existing.price;
 
-    if (!startDate || !endDate || endDate < startDate) {
+    if (!startDate) {
+      return res.status(400).json({ error: "Chybí datum začátku." });
+    }
+    if (endDate && endDate < startDate) {
       return res.status(400).json({ error: "Datum konce nesmí být před datem začátku." });
     }
 
@@ -82,16 +90,27 @@ router.put(
   })
 );
 
+// Vrácení výpůjčky. U flexibilní výpůjčky bez pevného data vrácení frontend
+// pošle finální datum a (případně ručně upravenou) cenu, kterou tím zafixujeme —
+// u běžné výpůjčky s pevným termínem se posílá prázdné tělo a nic z toho se nemění.
 router.put(
   "/:id/return",
   asyncHandler(async (req, res) => {
-    const { rows } = await pool.query(
-      `UPDATE reservations SET status = 'returned', returned_at = CURRENT_DATE WHERE id = $1 RETURNING *`,
-      [req.params.id]
-    );
-    if (rows.length === 0) {
+    const { endDate, price } = req.body || {};
+    const { rows: existingRows } = await pool.query(`SELECT * FROM reservations WHERE id = $1`, [req.params.id]);
+    if (existingRows.length === 0) {
       return res.status(404).json({ error: "Výpůjčka nenalezena." });
     }
+    const existing = existingRows[0];
+    const finalEndDate = endDate || existing.end_date; // NULL, pokud se ani teď nedodá — dorovná se v SQL na dnešek
+    const finalPrice = price !== undefined ? Number(price) || 0 : existing.price;
+
+    const { rows } = await pool.query(
+      `UPDATE reservations
+       SET status = 'returned', returned_at = CURRENT_DATE, end_date = COALESCE($1, CURRENT_DATE), price = $2
+       WHERE id = $3 RETURNING *`,
+      [finalEndDate, finalPrice, req.params.id]
+    );
     res.json(mapReservation(rows[0]));
   })
 );

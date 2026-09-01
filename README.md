@@ -150,7 +150,12 @@ klient přidá na plochu, otevře se mu rovnou přehled dostupnosti.
   případ omylu). Dále stav úhrady (nezaplaceno/záloha/zaplaceno), editace
   termínu/počtu kusů/kauce/ceny u aktivní nebo čekající výpůjčky a smazání
   výpůjčky v jakémkoli stavu (s potvrzením, pro opravu chybně založených
-  záznamů)
+  záznamů). Pokud klient předem neví, kdy pomůcku vrátí, jde datum „Do"
+  nechat prázdné („Datum vrácení zatím neznámé") — appka pak v tabulce
+  průběžně počítá dny od začátku a odhaduje cenu k dnešnímu dni. Až se
+  pomůcka skutečně vrátí, tlačítko „Vrátit" u takové výpůjčky otevře dialog
+  na doplnění skutečného data vrácení a potvrzení (nebo ruční úpravy)
+  finální ceny.
 - **Žádosti o rezervaci z veřejné stránky** — klient si na `/verejny-prehled`
   u volné pomůcky vybere termín a pošle žádost (jméno, telefon). V appce se
   objeví v „Nové žádosti o rezervaci" na Přehledu a v tabulce Výpůjček
