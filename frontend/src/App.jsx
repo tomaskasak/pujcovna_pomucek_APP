@@ -172,7 +172,10 @@ export default function App() {
 
   const stats = useMemo(() => {
     const totalItems = data.items.length;
-    const rentedNow = itemsWithStatus.filter((i) => i.rentedQty > 0).length;
+    // počet aktivních výpůjček (ne počet různých druhů pomůcek — to by při
+    // více výpůjčkách stejné pomůcky matoucně ukazovalo nižší číslo, než kolik
+    // je skutečně půjčeno)
+    const rentedNow = data.reservations.filter((r) => r.status === "active").length;
     const overdue = itemsWithStatus.filter((i) => i.hasOverdue).length;
     const monthStart = todayISO().slice(0, 7);
     const revenueThisMonth = data.payments
