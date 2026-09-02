@@ -1363,15 +1363,24 @@ function EditReservationModal({ reservation, item, client, onClose, onSave }) {
   const [openEnded, setOpenEnded] = useState(!reservation?.endDate);
   const [quantity, setQuantity] = useState(String(reservation?.quantity ?? "1"));
   const [deposit, setDeposit] = useState(String(reservation?.deposit ?? ""));
-  // vždy ruční pole, předvyplněné aktuální cenou — úprava termínu/kusů ho nikdy potichu nepřepíše
   const [priceInput, setPriceInput] = useState(String(reservation?.price ?? "0"));
-
-  if (!reservation) return null;
+  // u otevřené (flexibilní) výpůjčky appka cenu dál sama přepočítává podle dnešního
+  // dne, dokud ji admin ručně nezmění — u pevného termínu se nikdy sama nepřepíše
+  const [priceTouched, setPriceTouched] = useState(false);
 
   const qtyNum = Math.max(1, Number(quantity) || 1);
   const days = Math.max(1, daysBetween(startDate, openEnded ? todayISO() : endDate) + 1);
   const rate = item ? effectiveRate(item, days) : 0;
-  const computedPrice = item ? days * qtyNum * rate : reservation.price;
+  const computedPrice = item ? days * qtyNum * rate : reservation?.price || 0;
+
+  useEffect(() => {
+    if (openEnded && !priceTouched) {
+      setPriceInput(String(computedPrice));
+    }
+  }, [openEnded, priceTouched, computedPrice]);
+
+  if (!reservation) return null;
+
   const price = Number(priceInput) || 0;
 
   const canSave = startDate && (openEnded || (endDate && endDate >= startDate)) && qtyNum > 0;
@@ -1411,7 +1420,9 @@ function EditReservationModal({ reservation, item, client, onClose, onSave }) {
 
       <div className="price-box">
         {openEnded && (
-          <div className="price-row tier-applied">odhad k dnešnímu dni — appka bude počítat dál, dokud výpůjčku neukončíš</div>
+          <div className="price-row tier-applied">
+            cena se u otevřené výpůjčky automaticky přepočítává podle dnešního dne — klidně ji ale níže kdykoli přepiš ručně
+          </div>
         )}
         {item && (
           <div className="price-row">
@@ -1419,11 +1430,25 @@ function EditReservationModal({ reservation, item, client, onClose, onSave }) {
           </div>
         )}
         <Field label="Cena k fakturaci (Kč)">
-          <input inputMode="numeric" className="mono" value={priceInput} onChange={(e) => setPriceInput(e.target.value.replace(/\D/g, ""))} />
+          <input
+            inputMode="numeric"
+            className="mono"
+            value={priceInput}
+            onChange={(e) => {
+              setPriceTouched(true);
+              setPriceInput(e.target.value.replace(/\D/g, ""));
+            }}
+          />
         </Field>
         {item && Number(priceInput) !== computedPrice && (
-          <button className="link-btn" onClick={() => setPriceInput(String(computedPrice))}>
-            Použít cenu dle ceníku ({czk(computedPrice)})
+          <button
+            className="link-btn"
+            onClick={() => {
+              setPriceTouched(false);
+              setPriceInput(String(computedPrice));
+            }}
+          >
+            {openEnded ? `Přepočítat na dnešní den (${czk(computedPrice)})` : `Použít cenu dle ceníku (${czk(computedPrice)})`}
           </button>
         )}
       </div>
