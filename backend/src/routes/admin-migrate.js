@@ -19,8 +19,14 @@ const TABLES = ["users", "clients", "items", "reservations", "payments"];
 router.get(
   "/migrate-to-supabase",
   asyncHandler(async (req, res) => {
-    if (!process.env.MIGRATION_SECRET || req.query.secret !== process.env.MIGRATION_SECRET) {
-      return res.status(403).json({ error: "Neplatný nebo chybějící token (secret)." });
+    if (!process.env.MIGRATION_SECRET) {
+      return res.status(400).json({ error: "MIGRATION_SECRET není na serveru vůbec nastavený — ulož ho v Render Environment." });
+    }
+    if (req.query.secret !== process.env.MIGRATION_SECRET) {
+      return res.status(403).json({
+        error: "Zadaný token nesedí s hodnotou uloženou na serveru.",
+        hint: `Server má token dlouhý ${process.env.MIGRATION_SECRET.length} znaků, začínající na "${process.env.MIGRATION_SECRET.slice(0, 4)}".`,
+      });
     }
     if (!process.env.SUPABASE_DATABASE_URL) {
       return res.status(400).json({ error: "Proměnná SUPABASE_DATABASE_URL není na serveru nastavená." });
