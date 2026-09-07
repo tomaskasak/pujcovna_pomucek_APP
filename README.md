@@ -84,27 +84,39 @@ Vite dev server automaticky přeposílá volání `/api/*` na backend
 Nejjednodušší způsob, jak appku vyzkoušet na telefonu/tabletu nebo ukázat
 někomu jinému bez instalace čehokoli — appka poběží na veřejné adrese.
 
-1. Založ si účet na https://render.com (jde přes GitHub, zdarma, karta se
+Databáze běží na **Supabase** (bezplatně, natrvalo — bez časového omezení),
+appka samotná na **Render** (bezplatná web služba). `render.yaml` už proto
+sám PostgreSQL databázi nezakládá — je potřeba mít vlastní Supabase projekt.
+
+1. Založ si zdarma účet a nový projekt na https://supabase.com — u
+   zakládání projektu si ulož **heslo databáze**.
+2. V projektu jdi na **Project Settings → Database → Connection Pooling**
+   a zkopíruj **Session pooler** connection string (tvaru
+   `postgresql://postgres.xxxx:[HESLO]@aws-0-region.pooler.supabase.com:6543/postgres`).
+   Přímé připojení (`db.xxxx.supabase.co`) na Renderu **nefunguje** — jede
+   jen přes IPv6, který Render nepodporuje, proto je potřeba právě tenhle
+   pooler.
+3. Založ si účet na https://render.com (jde přes GitHub, zdarma, karta se
    nevyžaduje).
-2. V Render dashboardu klikni **New +** → **Blueprint**.
-3. Připoj tenhle GitHub repozitář (`tomaskasak/pujcovna_pomucek_APP`) —
+4. V Render dashboardu klikni **New +** → **Blueprint**.
+5. Připoj tenhle GitHub repozitář (`tomaskasak/pujcovna_pomucek_APP`) —
    Render sám najde soubor `render.yaml` v kořeni repozitáře a podle něj
-   založí web službu i PostgreSQL databázi najednou.
-4. Render se při zakládání zeptá na hodnoty `ADMIN_USERNAME` a
-   `ADMIN_PASSWORD` (přihlašovací účet pro obsluhu půjčovny) — vyplň si
-   vlastní jméno a silné heslo. `JWT_SECRET` se vygeneruje automaticky.
-5. Klikni **Apply** a počkej, než doběhne build (pár minut).
-6. Až je hotovo, Render appce přidělí veřejnou adresu tvaru
+   založí web službu.
+6. Render se při zakládání zeptá na hodnoty proměnných — vyplň:
+   - `DATABASE_URL` — connection string ze Supabase (krok 2)
+   - `ADMIN_USERNAME` a `ADMIN_PASSWORD` — přihlašovací účet pro obsluhu
+     půjčovny, vlastní jméno a silné heslo (`JWT_SECRET` se vygeneruje sám)
+7. Klikni **Apply** a počkej, než doběhne build (pár minut).
+8. Až je hotovo, Render appce přidělí veřejnou adresu tvaru
    `https://pujcovna-backend-xxxx.onrender.com` — tu si otevři v prohlížeči
-   a přihlas se účtem z kroku 4.
+   a přihlas se účtem z kroku 6.
 
 **Na co pamatovat u bezplatného tieru:**
-- Web služba po ~15 minutách bez provozu „usne" a první další request ji
-  pár desítek sekund budí — to je normální, ne chyba.
-- Bezplatná PostgreSQL databáze má na Renderu časově omezenou životnost
-  (řádově týdny/měsíce dle aktuálních podmínek Render) — pro dlouhodobý
-  ostrý provoz bude časem potřeba přejít na placený tier nebo databázi
-  jinam přenést.
+- Web služba na Renderu po ~15 minutách bez provozu „usne" a první další
+  request ji pár desítek sekund budí — to je normální, ne chyba.
+- Supabase bezplatný projekt se po ~týdnu úplné neaktivity (žádný požadavek
+  na appku) sám pozastaví — stačí ho v Supabase dashboardu jedním kliknutím
+  znovu spustit (**Restore project**), data se tím nijak neztrácí.
 
 ## Produkční nasazení (jeden server)
 

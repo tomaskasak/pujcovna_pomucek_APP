@@ -28,9 +28,3 @@ services:
         sync: false
       - key: NOTIFY_EMAIL_TO
         sync: false
-
-databases:
-  - name: pujcovna-db
-    plan: free
-    databaseName: pujcovna
-    user: pujcovna
