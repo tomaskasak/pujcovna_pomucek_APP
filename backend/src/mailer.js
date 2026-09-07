@@ -36,6 +36,20 @@ async function sendMail({ subject, text }) {
   }
 }
 
+export function sendWeeklySummary({ totalItems, activeReservations, overdue, revenueThisMonth, pendingRequests }) {
+  const link = process.env.APP_URL ? `\n\nOtevřít appku: ${process.env.APP_URL}` : "";
+  return sendMail({
+    subject: "Týdenní přehled půjčovny",
+    text: `Automatický týdenní přehled appky.
+
+Pomůcek celkem: ${totalItems}
+Aktuálně půjčeno: ${activeReservations}
+Po termínu: ${overdue}
+Tržby tento měsíc: ${revenueThisMonth} Kč
+Čeká na schválení: ${pendingRequests}${link}`,
+  });
+}
+
 export function notifyNewReservationRequest({ clientName, clientPhone, itemName, startDate, endDate, quantity }) {
   return sendMail({
     subject: `Nová žádost o rezervaci — ${itemName}`,

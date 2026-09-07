@@ -1,0 +1,25 @@
+name: Keep app and database awake
+
+# Bezplatný Supabase projekt (databáze appky) se sám pozastaví, pokud na
+# appku týden nikdo vůbec nesáhne. Tahle úloha jednou týdně (v pondělí)
+# zavolá appku a zároveň jí řekne, ať pošle e-mailem týdenní přehled, a ve
+# čtvrtek ještě jednou "jen tak" pro bezpečnou rezervu pod tím týdenním
+# limitem (ať appku nikdy nepozastaví ani prodloužený víkend).
+on:
+  schedule:
+    - cron: "0 7 * * 1" # pondělí 7:00 UTC — s mailem
+    - cron: "0 7 * * 4" # čtvrtek 7:00 UTC — jen tichý ping
+  workflow_dispatch: {} # jde spustit i ručně (záložka Actions v GitHubu)
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Zavolat keep-alive endpoint appky
+        run: |
+          if [ "${{ github.event.schedule }}" = "0 7 * * 1" ]; then
+            NOTIFY="&notify=1"
+          else
+            NOTIFY=""
+          fi
+          curl -fsS "https://pujcovna-backend.onrender.com/api/cron/keep-alive?secret=${{ secrets.CRON_SECRET }}${NOTIFY}"

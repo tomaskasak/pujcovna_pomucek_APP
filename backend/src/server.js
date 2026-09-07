@@ -14,6 +14,7 @@ import clientsRouter from "./routes/clients.js";
 import itemsRouter from "./routes/items.js";
 import reservationsRouter from "./routes/reservations.js";
 import paymentsRouter from "./routes/payments.js";
+import cronRouter from "./routes/cron.js";
 
 dotenv.config();
 
@@ -29,6 +30,9 @@ app.get("/api/health", (req, res) => res.json({ ok: true }));
 // Bez přihlášení: přihlašovací obrazovka a veřejný přehled dostupnosti pro klienty.
 app.use("/api/auth", authRouter);
 app.use("/api/public", publicRouter);
+// Bez přihlášení (volá to naplánovaná GitHub Actions úloha, ne člověk) —
+// chráněno vlastním tokenem, viz routes/cron.js.
+app.use("/api/cron", cronRouter);
 
 // Od téhle řádky dál už je vše za přihlášením.
 app.use("/api", requireAuth);

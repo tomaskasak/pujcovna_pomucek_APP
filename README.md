@@ -218,6 +218,37 @@ najdeš ve Wedos klientské zóně u dané domény/e-mailu (obvykle
 Po vyplnění na Renderu appku není potřeba znovu nasazovat — nové proměnné se
 projeví při příštím restartu služby (Render to po uložení udělá sám).
 
+## Týdenní přehled mailem (a proč appka nikdy neusne úplně)
+
+Appka jednou týdně (v pondělí) automaticky pošle mailem krátký přehled —
+kolik je pomůcek, kolik jich je půjčeno, kolik je po termínu, tržby za
+tento měsíc a kolik čeká nevyřízených žádostí. Zároveň to má vedlejší
+užitečný efekt: bezplatný Supabase projekt (databáze appky) se sám
+pozastaví, pokud na appku **týden** nikdo/nic vůbec nesáhne — tahle úloha
+(plus druhé, tiché zavolání ve čtvrtek pro bezpečnou rezervu) appku i
+databázi pravidelně "probouzí", takže se to nikdy nestane.
+
+Zařizuje to naplánovaná úloha na GitHubu (`.github/workflows/keep-alive.yml`),
+běží zdarma a nezávisle na appce i na tobě. Aby fungovala, potřebuje:
+
+1. V **Render → služba `pujcovna-backend` → Environment** nastavit proměnnou
+   `CRON_SECRET` na libovolný dlouhý náhodný řetězec (tajný token).
+2. Ve **stejném GitHub repozitáři** (`github.com/tomaskasak/pujcovna_pomucek_APP`)
+   jít do **Settings → Secrets and variables → Actions → New repository
+   secret**, vytvořit tajemství jménem `CRON_SECRET` a vložit **stejnou**
+   hodnotu jako v kroku 1.
+3. Volitelně nastavit i `APP_URL` (adresa appky) — přidá se pak jako odkaz
+   do těla přehledového mailu.
+
+Bez tohohle nastavení appka funguje úplně normálně, jen bez týdenního
+mailu a bez automatického probouzení — po týdnu nečinnosti by pak bylo
+potřeba databázi ručně obnovit v Supabase dashboardu (**Restore project**,
+data se tím neztratí).
+
+Průběh té naplánované úlohy jde kdykoli zkontrolovat na GitHubu v záložce
+**Actions**, a jde ji tam i ručně spustit tlačítkem "Run workflow" (pro
+vyzkoušení, není potřeba čekat na pondělí/čtvrtek).
+
 ## Přihlašování — jak přidat další účet
 
 Appka zatím nemá formulář pro registraci nových účtů (aby se zbytečně
