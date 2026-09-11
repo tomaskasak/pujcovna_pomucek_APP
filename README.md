@@ -187,33 +187,36 @@ upozorňovací e-mail. Je to **volitelné** — bez vyplnění appka funguje úp
 stejně, jen notifikaci neposílá (a odeslání žádosti to nijak nezpomalí ani
 nezablokuje, i kdyby mail selhal).
 
-Zapíná se vyplněním proměnných v `.env` (lokálně) nebo v **Render → služba
-`pujcovna-backend` → Environment** (na ostrém provozu):
+Posílá se přes **Resend** (e-mailová služba s HTTPS API) — **ne přes SMTP**.
+Cloudoví poskytovatelé jako Render odchozí SMTP porty (25/465/587) běžně
+blokují kvůli ochraně proti spamu, a to bez ohledu na to, jestli platíš, nebo
+appku máš na bezplatném tarifu — SMTP tak z appky na Renderu nejde spolehlivě
+poslat. Resend používá normální HTTPS, které blokované není.
+
+**Nastavení (5 minut, zdarma):**
+
+1. Založ si účet na [resend.com](https://resend.com) (jde přes GitHub/Google,
+   zdarma — 3 000 mailů/měsíc v bezplatném tarifu)
+2. V dashboardu **API Keys → Create API Key** — zkopíruj si vygenerovaný klíč
+   (zobrazí se jen jednou)
+3. V **Render → služba `pujcovna-backend` → Environment** nastav:
 
 ```
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_USER=tvoje-adresa@gmail.com
-SMTP_PASS=heslo-aplikace       # NE běžné heslo do Gmailu, viz níže
-SMTP_FROM=tvoje-adresa@gmail.com
-NOTIFY_EMAIL_TO=kam-chces-posilat-upozorneni@gmail.com
+RESEND_API_KEY=re_xxxxxxxxxxxxxxxxxxxxxxxx
+NOTIFY_EMAIL_TO=kam-chces-posilat-upozorneni@example.com
 ```
 
-**Nejjednodušší cesta — poslat přes Gmail:**
+To stačí k rychlému vyzkoušení — appka bez dalšího nastavení posílá z adresy
+`onboarding@resend.dev`, což ale v bezplatném (neověřeném) režimu Resend
+umožní doručit mail **jen na tu e-mailovou adresu, kterou máš zaregistrovanou
+u samotného Resend účtu**. Pro posílání na jakoukoli adresu (a hezčí
+odesílající jméno/doménu, např. `Půjčovna <pujcovna@reharentkrkonose.cz>`) je
+potřeba ve **Resend → Domains** přidat a ověřit vlastní doménu (pár DNS
+záznamů u Wedosu) a pak nastavit i:
 
-1. Na [myaccount.google.com/security](https://myaccount.google.com/security)
-   zapni **dvoufázové ověření** (bez něj aplikační hesla nejdou vytvořit).
-2. Na [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords)
-   vytvoř nové **heslo aplikace** (App password) — zadej libovolný název
-   (např. „Půjčovna"), Google ti vygeneruje 16místné heslo.
-3. Toto heslo (ne svoje běžné heslo do Gmailu!) vyplň do `SMTP_PASS`.
-4. `SMTP_USER` i `SMTP_FROM` je tvá gmailová adresa, `NOTIFY_EMAIL_TO` adresa,
-   kam se mají upozornění posílat (klidně stejná).
-
-**Alternativa — poslat přes schránku na Wedosu:** SMTP údaje (server, port)
-najdeš ve Wedos klientské zóně u dané domény/e-mailu (obvykle
-`smtp.wedos.net`, port `587`), `SMTP_USER`/`SMTP_PASS` jsou přihlašovací
-údaje té schránky.
+```
+RESEND_FROM=Půjčovna <pujcovna@reharentkrkonose.cz>
+```
 
 Po vyplnění na Renderu appku není potřeba znovu nasazovat — nové proměnné se
 projeví při příštím restartu služby (Render to po uložení udělá sám).

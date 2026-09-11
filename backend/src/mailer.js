@@ -1,37 +1,39 @@
-import nodemailer from "nodemailer";
-
 // E-mailové notifikace jsou volitelné — appka funguje normálně i bez nich.
-// Aktivují se až vyplněním SMTP_* proměnných v .env / na Renderu (viz README).
-const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM, NOTIFY_EMAIL_TO } = process.env;
+// Posílají se přes Resend (HTTPS API, ne SMTP) — cloudoví poskytovatelé jako
+// Render odchozí SMTP porty běžně blokují kvůli ochraně proti spamu, HTTPS
+// ale ne. Návod na nastavení je v README.
+const { RESEND_API_KEY, RESEND_FROM, NOTIFY_EMAIL_TO } = process.env;
 
-const isConfigured = Boolean(SMTP_HOST && SMTP_USER && SMTP_PASS && NOTIFY_EMAIL_TO);
+const isConfigured = Boolean(RESEND_API_KEY && NOTIFY_EMAIL_TO);
 
-let transporter = null;
-if (isConfigured) {
-  transporter = nodemailer.createTransport({
-    host: SMTP_HOST,
-    port: Number(SMTP_PORT) || 587,
-    secure: Number(SMTP_PORT) === 465, // 465 = SSL rovnou, 587/25 = STARTTLS
-    auth: { user: SMTP_USER, pass: SMTP_PASS },
-    connectionTimeout: 10000, // ať appka na nedostupný/špatně zadaný SMTP server nečeká minuty
-  });
-} else {
+if (!isConfigured) {
   console.log(
-    "E-mailové notifikace nejsou nastavené (chybí SMTP_HOST/SMTP_USER/SMTP_PASS/NOTIFY_EMAIL_TO) — appka poběží dál, jen bez upozornění mailem."
+    "E-mailové notifikace nejsou nastavené (chybí RESEND_API_KEY/NOTIFY_EMAIL_TO) — appka poběží dál, jen bez upozornění mailem."
   );
 }
 
 // Nikdy nesmí shodit request, který notifikaci spouští (např. odeslání žádosti
 // o rezervaci z veřejné stránky) — chyba při odesílání mailu se jen zaloguje.
 async function sendMail({ subject, text }) {
-  if (!transporter) return;
+  if (!isConfigured) return;
   try {
-    await transporter.sendMail({
-      from: SMTP_FROM || SMTP_USER,
-      to: NOTIFY_EMAIL_TO,
-      subject,
-      text,
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${RESEND_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: RESEND_FROM || "Půjčovna <onboarding@resend.dev>",
+        to: [NOTIFY_EMAIL_TO],
+        subject,
+        text,
+      }),
     });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(`Resend vrátil chybu ${res.status}: ${body}`);
+    }
   } catch (err) {
     console.error("Odeslání e-mailové notifikace se nezdařilo:", err.message);
   }
