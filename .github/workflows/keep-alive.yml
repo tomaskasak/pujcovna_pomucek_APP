@@ -9,7 +9,12 @@ on:
   schedule:
     - cron: "0 7 * * 1" # pondělí 7:00 UTC — s mailem
     - cron: "0 7 * * 4" # čtvrtek 7:00 UTC — jen tichý ping
-  workflow_dispatch: {} # jde spustit i ručně (záložka Actions v GitHubu)
+  workflow_dispatch: # jde spustit i ručně (záložka Actions v GitHubu), volitelně i s mailem
+    inputs:
+      notify:
+        description: "Poslat i přehled mailem"
+        type: boolean
+        default: false
 
 jobs:
   ping:
@@ -17,7 +22,7 @@ jobs:
     steps:
       - name: Zavolat keep-alive endpoint appky
         run: |
-          if [ "${{ github.event.schedule }}" = "0 7 * * 1" ]; then
+          if [ "${{ github.event.schedule }}" = "0 7 * * 1" ] || [ "${{ github.event.inputs.notify }}" = "true" ]; then
             NOTIFY="&notify=1"
           else
             NOTIFY=""
