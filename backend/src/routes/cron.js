@@ -14,14 +14,8 @@ const router = Router();
 router.get(
   "/keep-alive",
   asyncHandler(async (req, res) => {
-    if (!process.env.CRON_SECRET) {
-      return res.status(400).json({ error: "CRON_SECRET není na serveru vůbec nastavený — ulož ho v Render Environment." });
-    }
-    if (req.query.secret !== process.env.CRON_SECRET) {
-      return res.status(403).json({
-        error: "Zadaný token nesedí s hodnotou uloženou na serveru.",
-        hint: `Server má token dlouhý ${process.env.CRON_SECRET.length} znaků, začínající na "${process.env.CRON_SECRET.slice(0, 4)}".`,
-      });
+    if (!process.env.CRON_SECRET || req.query.secret !== process.env.CRON_SECRET) {
+      return res.status(403).json({ error: "Neplatný nebo chybějící token." });
     }
 
     const [totalItemsRes, activeRes, overdueRes, revenueRes, pendingRes] = await Promise.all([
