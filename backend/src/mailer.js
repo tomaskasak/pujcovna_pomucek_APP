@@ -13,6 +13,7 @@ if (isConfigured) {
     port: Number(SMTP_PORT) || 587,
     secure: Number(SMTP_PORT) === 465, // 465 = SSL rovnou, 587/25 = STARTTLS
     auth: { user: SMTP_USER, pass: SMTP_PASS },
+    connectionTimeout: 10000, // ať appka na nedostupný/špatně zadaný SMTP server nečeká minuty
   });
 } else {
   console.log(

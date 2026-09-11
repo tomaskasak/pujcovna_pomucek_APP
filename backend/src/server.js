@@ -1,3 +1,4 @@
+import dns from "dns";
 import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
@@ -5,6 +6,11 @@ import dotenv from "dotenv";
 import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
+
+// Render nepodporuje odchozí IPv6 — bez tohohle appka u hostname s IPv6 i IPv4
+// adresou (např. SMTP server) nejdřív zkusí IPv6, dlouho čeká na timeout a až
+// pak (nebo vůbec) zkusí IPv4. Tohle appku donutí rovnou preferovat IPv4.
+dns.setDefaultResultOrder("ipv4first");
 
 import { requireAuth } from "./auth.js";
 import authRouter from "./routes/auth.js";
