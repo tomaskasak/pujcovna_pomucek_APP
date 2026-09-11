@@ -22,4 +22,11 @@ jobs:
           else
             NOTIFY=""
           fi
-          curl -fsS "https://pujcovna-backend.onrender.com/api/cron/keep-alive?secret=${{ secrets.CRON_SECRET }}${NOTIFY}"
+          HTTP_STATUS=$(curl -sS -o response.json -w "%{http_code}" \
+            "https://pujcovna-backend.onrender.com/api/cron/keep-alive?secret=${{ secrets.CRON_SECRET }}${NOTIFY}")
+          echo "HTTP status: $HTTP_STATUS"
+          cat response.json
+          echo
+          if [ "$HTTP_STATUS" -ge 400 ]; then
+            exit 1
+          fi
