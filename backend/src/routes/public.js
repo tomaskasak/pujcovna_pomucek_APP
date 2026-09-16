@@ -7,20 +7,30 @@ import { notifyNewReservationRequest } from "../mailer.js";
 
 const router = Router();
 
-// Bez přihlášení — jen název, kategorie, cena/den a dostupnost. Žádná jména klientů.
-// Do "obsazeno" počítáme i nevyřízené (pending) žádosti, aby dva zákazníci nemohli
-// najednou žádat o poslední kus téže pomůcky.
+// Bez přihlášení — jen název, kategorie, cena/den, dostupnost a obsazené
+// termíny (bez jmen klientů, jen pro kalendář).
 router.get(
   "/items",
   asyncHandler(async (req, res) => {
-    const [items, agg] = await Promise.all([
+    const [items, agg, ranges] = await Promise.all([
       pool.query(`SELECT * FROM items ORDER BY name`),
       pool.query(
         `SELECT item_id, COALESCE(SUM(quantity), 0) AS rented
          FROM reservations WHERE status IN ('active', 'pending') GROUP BY item_id`
       ),
+      // Termíny (bez jmen klientů) pro kalendář dostupnosti na veřejné stránce —
+      // end_date NULL = flexibilní výpůjčka bez známého konce, kalendář to ukáže
+      // jako "možná stále obsazeno" až do konce zobrazeného měsíce.
+      pool.query(
+        `SELECT item_id, start_date, end_date FROM reservations
+         WHERE status IN ('active', 'pending') ORDER BY start_date`
+      ),
     ]);
     const rentedByItem = Object.fromEntries(agg.rows.map((r) => [r.item_id, Number(r.rented)]));
+    const rangesByItem = {};
+    ranges.rows.forEach((r) => {
+      (rangesByItem[r.item_id] = rangesByItem[r.item_id] || []).push({ start: r.start_date, end: r.end_date });
+    });
 
     const result = items.rows
       .filter((it) => !it.service_flag)
@@ -32,7 +42,9 @@ router.get(
           category: it.category || "",
           dailyRate: it.daily_rate,
           priceTiers: it.price_tiers || [],
+          quantityTotal: it.quantity_total,
           availableQty,
+          bookedRanges: rangesByItem[it.id] || [],
         };
       });
 
@@ -42,33 +54,28 @@ router.get(
 
 // Odeslání žádosti o rezervaci z veřejné stránky. Vytvoří se jako "pending" —
 // nezapíše se rovnou jako závazná výpůjčka, obsluha ji musí schválit v appce.
+// Jde odeslat i na pomůcku, která je zrovna celá půjčená (nezávazná rezervace
+// do fronty — obsluha ji schválí, až se pomůcka uvolní), a i bez data konce
+// (klient si termín vrácení zatím není jistý).
 router.post(
   "/reservations",
   asyncHandler(async (req, res) => {
     const { itemId, quantity, startDate, endDate, clientName, clientPhone } = req.body || {};
 
-    if (!itemId || !startDate || !endDate || endDate < startDate) {
-      return res.status(400).json({ error: "Vyplňte prosím platné datum od–do." });
+    if (!itemId || !startDate || (endDate && endDate < startDate)) {
+      return res.status(400).json({ error: "Vyplňte prosím platné datum." });
     }
     if (!clientName || !clientName.trim() || !clientPhone || !clientPhone.trim()) {
       return res.status(400).json({ error: "Vyplňte prosím jméno a telefon." });
     }
-    const qty = Math.max(1, Number(quantity) || 1);
 
     const { rows: itemRows } = await pool.query(`SELECT * FROM items WHERE id = $1 AND service_flag = false`, [itemId]);
     if (itemRows.length === 0) {
       return res.status(404).json({ error: "Pomůcka nenalezena." });
     }
     const item = itemRows[0];
-
-    const { rows: reservedRows } = await pool.query(
-      `SELECT COALESCE(SUM(quantity), 0) AS reserved FROM reservations WHERE item_id = $1 AND status IN ('active', 'pending')`,
-      [itemId]
-    );
-    const availableQty = item.quantity_total - Number(reservedRows[0].reserved);
-    if (qty > availableQty) {
-      return res.status(409).json({ error: `Bohužel je momentálně k dispozici jen ${availableQty} ks.` });
-    }
+    // appka eviduje max tolik kusů, kolik jich fyzicky vlastníš — víc smysl nedává ani ve frontě
+    const qty = Math.min(item.quantity_total, Math.max(1, Number(quantity) || 1));
 
     // najít existujícího klienta podle telefonu, jinak založit nového
     let clientId;
@@ -85,14 +92,19 @@ router.post(
       clientId = newClient[0].id;
     }
 
-    const days = Math.max(1, daysBetween(startDate, endDate) + 1);
-    const rate = effectiveRate(item.price_tiers, item.daily_rate, days);
-    const price = days * qty * rate;
+    // bez data konce (klient neví, kdy vrátí) appka cenu zatím neumí spočítat —
+    // obsluha ji doplní/upraví při schválení, až bude znát skutečnou dobu
+    let price = 0;
+    if (endDate) {
+      const days = Math.max(1, daysBetween(startDate, endDate) + 1);
+      const rate = effectiveRate(item.price_tiers, item.daily_rate, days);
+      price = days * qty * rate;
+    }
 
     const { rows } = await pool.query(
       `INSERT INTO reservations (client_id, item_id, quantity, start_date, end_date, deposit, price, status, payment_status)
        VALUES ($1, $2, $3, $4, $5, 0, $6, 'pending', 'nezaplaceno') RETURNING *`,
-      [clientId, itemId, qty, startDate, endDate, price]
+      [clientId, itemId, qty, startDate, endDate || null, price]
     );
     res.status(201).json(mapReservation(rows[0]));
 

@@ -978,11 +978,11 @@ export function PublicStockPage({ items, standalone, onReserve }) {
                 {it.availableQty > 0 ? (
                   <span className="stock-pill public-ok">Skladem {it.availableQty} ks</span>
                 ) : (
-                  <span className="stock-pill stock-empty">Momentálně vyprodáno</span>
+                  <span className="stock-pill stock-empty">Momentálně půjčeno</span>
                 )}
-                {onReserve && it.availableQty > 0 && (
+                {onReserve && (
                   <button className="link-btn public-reserve-btn" onClick={() => onReserve(it)}>
-                    Rezervovat →
+                    {it.availableQty > 0 ? "Rezervovat →" : "Rezervovat na později →"}
                   </button>
                 )}
               </div>
@@ -1803,6 +1803,26 @@ export function Style() {
       .reservation-success { text-align:center; padding: 10px 4px 4px; }
       .reservation-success svg { margin-bottom: 10px; }
       .reservation-success p { color:#6B6555; font-size:13.5px; margin: 6px 0 18px; }
+
+      .avail-cal { background:#F7F2E4; border:1px solid #E8E0C8; border-radius:10px; padding:12px 14px; margin: 4px 0 14px; }
+      .avail-cal-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+      .avail-cal-head-title { font-size:13.5px; font-weight:600; color:#20281F; text-transform:capitalize; }
+      .avail-cal-nav { background:none; border:1px solid #DDD3B8; border-radius:6px; width:26px; height:26px; display:flex; align-items:center; justify-content:center; cursor:pointer; color:#6B6555; }
+      .avail-cal-nav:disabled { opacity:0.35; cursor:default; }
+      .avail-cal-grid { display:grid; grid-template-columns: repeat(7, 1fr); gap:3px; }
+      .avail-cal-dow { font-size:10.5px; color:#8C8470; text-align:center; padding-bottom:4px; }
+      .avail-day {
+        aspect-ratio: 1; border:none; border-radius:6px; font-size:12px; font-family:inherit;
+        display:flex; align-items:center; justify-content:center; cursor:pointer; background:#EAF4EE; color:#2F5D3F;
+      }
+      .avail-day-blank { visibility:hidden; cursor:default; }
+      .avail-day-past { background:transparent; color:#C9C1AA; cursor:default; }
+      .avail-day-booked { background:#FAECE7; color:#B5482F; cursor:default; }
+      .avail-day-open { background:repeating-linear-gradient(45deg, #F6F0E4, #F6F0E4 4px, #EADFC4 4px, #EADFC4 8px); color:#8A6D3B; cursor:default; }
+      .avail-day-selected { outline: 2px solid #2F5D3F; outline-offset: 1px; font-weight:700; }
+      .avail-legend { display:flex; flex-wrap:wrap; gap:12px; margin-top:10px; }
+      .avail-legend-item { display:flex; align-items:center; gap:5px; font-size:11px; color:#6B6555; }
+      .avail-legend-dot { width:10px; height:10px; border-radius:3px; flex-shrink:0; }
 
       .login-card {
         background:#fff; border:1px solid #E8E0C8; border-radius:14px; padding:28px 26px;
