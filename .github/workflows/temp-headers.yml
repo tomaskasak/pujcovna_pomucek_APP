@@ -7,6 +7,21 @@ jobs:
   inspect:
     runs-on: ubuntu-latest
     steps:
-      - name: Fetch headers of pricelist page
+      - name: Fetch and dump pricelist page as text
         run: |
-          curl -sS -D - -o /dev/null "https://reharentkrkonose.cz/cenik-sluzeb-pujcovna-rehabilitacnich-pomucek/"
+          curl -sS -o page.html "https://reharentkrkonose.cz/cenik-sluzeb-pujcovna-rehabilitacnich-pomucek/"
+          python3 -c "
+import re
+html = open('page.html', encoding='utf-8').read()
+html = re.sub(r'<script[\s\S]*?</script>', '', html, flags=re.I)
+html = re.sub(r'<style[\s\S]*?</style>', '', html, flags=re.I)
+html = re.sub(r'</(tr|li|p|h[1-6]|div)>', '\n', html, flags=re.I)
+html = re.sub(r'<td[^>]*>', ' | ', html, flags=re.I)
+html = re.sub(r'<[^>]+>', '', html)
+html = html.replace('&nbsp;', ' ')
+html = re.sub(r'\n{2,}', '\n', html).strip()
+print(html)
+" > page.txt
+          wc -l page.txt
+          echo "---FULL TEXT---"
+          cat page.txt
