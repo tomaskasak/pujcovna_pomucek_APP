@@ -1726,7 +1726,9 @@ export function Style() {
       .empty { color:#8C8470; font-size:13.5px; padding: 30px 0; text-align:center; border: 1px dashed #DDD3B8; border-radius: 10px; }
 
       .table-wrap { background:#fff; border:1px solid #E8E0C8; border-radius:12px; overflow-x:auto; -webkit-overflow-scrolling:touch; }
-      .table { width:100%; border-collapse:collapse; font-size:13px; }
+      /* border-collapse:separate (ne collapse) — s "collapse" nefunguje spolehlivě
+         position:sticky na buňkách tabulky napříč prohlížeči. */
+      .table { width:100%; border-collapse:separate; border-spacing:0; font-size:13px; }
       .table th { text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:#8C8470; padding:10px 14px; border-bottom:1px solid #E8E0C8; white-space:nowrap; }
       .table td { padding:11px 14px; border-bottom:1px solid #F1ECD8; white-space:nowrap; }
       .table tr:last-child td { border-bottom:none; }
@@ -1860,18 +1862,23 @@ export function Style() {
 
         /* Tabulka výpůjček se na mobilu vodorovně roluje — klient a pomůcka
            zůstávají "přilepené" vlevo, zbytek (data, cena, stav, akce) se
-           posouvá pod nimi. */
+           posouvá pod nimi. Šířka obou sloupců je pevně daná (width = min-width
+           = max-width), aby sedělo "left" druhého sloupce přesně na hranu
+           prvního — jinak se v různých prohlížečích rozjíždí a překrývá. */
         .table th:nth-child(1), .table td:nth-child(1),
         .table th:nth-child(2), .table td:nth-child(2) {
           position: sticky;
           background: #fff;
           z-index: 2;
           white-space: normal;
-          max-width: 118px;
+          overflow-wrap: anywhere;
+          width: 104px;
+          min-width: 104px;
+          max-width: 104px;
         }
         .table th:nth-child(1), .table td:nth-child(1) { left: 0; }
         .table th:nth-child(2), .table td:nth-child(2) {
-          left: 118px;
+          left: 104px;
           box-shadow: 4px 0 6px -4px rgba(46,58,44,0.3);
         }
       }
