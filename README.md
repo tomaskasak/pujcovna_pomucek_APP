@@ -269,10 +269,6 @@ další nastavení není potřeba.
 Jde ji kdykoli spustit ručně v záložce **Actions** na GitHubu (tlačítko "Run
 workflow"), stejně jako `keep-alive.yml`.
 
-Tlačítko "Načíst uložený ceník" v appce (sekce Pomůcky) je nezávislé —
-používá se jen jednou na úplně nový/prázdný katalog pomůcek a čte ze
-zabudovaného seznamu v appce (`backend/src/pricelist.js`), ne živě z webu.
-
 ## Přihlašování — jak přidat další účet
 
 Appka zatím nemá formulář pro registraci nových účtů (aby se zbytečně

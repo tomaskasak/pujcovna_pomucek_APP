@@ -2,7 +2,6 @@ import { Router } from "express";
 import { pool } from "../db.js";
 import { asyncHandler } from "../asyncHandler.js";
 import { mapItem } from "../mappers.js";
-import { OFFICIAL_PRICELIST } from "../pricelist.js";
 
 const router = Router();
 
@@ -73,28 +72,6 @@ router.delete(
       return res.status(404).json({ error: "Pomůcka nenalezena." });
     }
     res.status(204).end();
-  })
-);
-
-// Doplní do databáze položky z oficiálního ceníku, které tam ještě nejsou (podle názvu).
-router.post(
-  "/seed-pricelist",
-  asyncHandler(async (req, res) => {
-    const { rows: existingRows } = await pool.query(`SELECT name FROM items`);
-    const existingNames = new Set(existingRows.map((r) => r.name.toLowerCase()));
-    const toAdd = OFFICIAL_PRICELIST.filter((p) => !existingNames.has(p.name.toLowerCase()));
-
-    const added = [];
-    for (const p of toAdd) {
-      const priceTiers = p.priceTiers && p.priceTiers.length ? p.priceTiers : [{ days: 1, rate: p.dailyRate }];
-      const { rows } = await pool.query(
-        `INSERT INTO items (name, category, quantity_total, daily_rate, price_tiers, service_flag)
-         VALUES ($1, $2, 1, $3, $4, false) RETURNING *`,
-        [p.name, p.category, p.dailyRate, JSON.stringify(priceTiers)]
-      );
-      added.push(mapItem(rows[0]));
-    }
-    res.status(201).json(added);
   })
 );
 

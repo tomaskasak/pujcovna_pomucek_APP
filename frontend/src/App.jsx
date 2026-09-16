@@ -235,19 +235,6 @@ export default function App() {
       return false;
     }
   };
-  const seedPriceList = async () => {
-    try {
-      const added = await api.seedPricelist();
-      if (added.length === 0) {
-        showToast("Ceník je už kompletní.");
-        return;
-      }
-      setData((d) => ({ ...d, items: [...d.items, ...added] }));
-      showToast("Uložený ceník načten — doplňte prosím počty kusů skladem");
-    } catch (e) {
-      showToast(e.message || "Načtení ceníku se nezdařilo.");
-    }
-  };
   const removeItem = async (id) => {
     try {
       await api.deleteItem(id);
@@ -482,9 +469,6 @@ export default function App() {
               )}
               {tab === "items" && (
                 <>
-                  <button className="btn btn-ghost" onClick={seedPriceList} title="Doplní pomůcky podle uloženého ceníku v appce (ne živě z webu)">
-                    Načíst uložený ceník
-                  </button>
                   <button className="btn btn-primary" onClick={() => setModal({ type: "item" })}>
                     <Plus size={16} /> Pomůcka
                   </button>
