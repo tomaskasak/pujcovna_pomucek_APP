@@ -1857,6 +1857,23 @@ export function Style() {
         .sidebar-foot { display:none; }
         .content { padding: 18px 16px 50px; }
         .topbar { padding: 16px; }
+
+        /* Tabulka výpůjček se na mobilu vodorovně roluje — klient a pomůcka
+           zůstávají "přilepené" vlevo, zbytek (data, cena, stav, akce) se
+           posouvá pod nimi. */
+        .table th:nth-child(1), .table td:nth-child(1),
+        .table th:nth-child(2), .table td:nth-child(2) {
+          position: sticky;
+          background: #fff;
+          z-index: 2;
+          white-space: normal;
+          max-width: 118px;
+        }
+        .table th:nth-child(1), .table td:nth-child(1) { left: 0; }
+        .table th:nth-child(2), .table td:nth-child(2) {
+          left: 118px;
+          box-shadow: 4px 0 6px -4px rgba(46,58,44,0.3);
+        }
       }
     `}</style>
   );
