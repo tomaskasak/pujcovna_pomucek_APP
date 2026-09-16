@@ -681,9 +681,25 @@ export default function App() {
                               {r.status === "active" && (
                                 <button
                                   className="link-btn"
-                                  onClick={() =>
-                                    r.endDate ? returnReservation(r.id) : setModal({ type: "reservation-return", editId: r.id })
-                                  }
+                                  onClick={() => {
+                                    if (!r.endDate) {
+                                      setModal({ type: "reservation-return", editId: r.id });
+                                      return;
+                                    }
+                                    const paid = paidByReservation[r.id] || 0;
+                                    const remaining = r.price - paid;
+                                    if (
+                                      paid > 0 &&
+                                      !window.confirm(
+                                        `Cena ${czk(r.price)}, již zaplaceno ${czk(paid)}${
+                                          remaining > 0 ? ` — zbývá doplatit ${czk(remaining)}.` : ", nic nezbývá."
+                                        }\n\nUkončit výpůjčku?`
+                                      )
+                                    ) {
+                                      return;
+                                    }
+                                    returnReservation(r.id);
+                                  }}
                                 >
                                   <Check size={14} /> Vrátit
                                 </button>
@@ -859,6 +875,7 @@ export default function App() {
           reservation={data.reservations.find((r) => r.id === modal.editId)}
           item={data.items.find((i) => i.id === data.reservations.find((r) => r.id === modal.editId)?.itemId)}
           client={clientById(data.reservations.find((r) => r.id === modal.editId)?.clientId)}
+          alreadyPaid={paidByReservation[modal.editId] || 0}
           onClose={() => setModal(null)}
           onSave={async (finalize) => {
             const ok = await returnReservation(modal.editId, finalize);
@@ -1534,7 +1551,7 @@ function EditReservationModal({ reservation, item, client, onClose, onSave }) {
 
 // Ukončení flexibilní výpůjčky bez pevného data vrácení — obsluha teď doplní
 // skutečné datum vrácení a potvrdí (nebo ručně upraví) finální cenu.
-function ReturnReservationModal({ reservation, item, client, onClose, onSave }) {
+function ReturnReservationModal({ reservation, item, client, alreadyPaid, onClose, onSave }) {
   const [endDate, setEndDate] = useState(todayISO());
   const [priceInput, setPriceInput] = useState("0");
   const [priceTouched, setPriceTouched] = useState(false);
@@ -1590,6 +1607,11 @@ function ReturnReservationModal({ reservation, item, client, onClose, onSave }) 
           >
             Použít cenu dle ceníku ({czk(computedPrice)})
           </button>
+        )}
+        {alreadyPaid > 0 && (
+          <div className="price-row paid-subtext">
+            již zaplaceno {czk(alreadyPaid)} — {price - alreadyPaid > 0 ? `zbývá doplatit ${czk(price - alreadyPaid)}` : "doplaceno, nic nezbývá"}
+          </div>
         )}
       </div>
 
@@ -1783,7 +1805,7 @@ export function Style() {
       .link-btn-danger { color:#B5482F; }
       .row-actions { display:flex; align-items:center; gap:10px; white-space:nowrap; }
       .table-subtext { font-size:11px; color:#8C8470; margin-top:2px; }
-      .table-subtext.paid-subtext { color:#3F8D5E; font-weight:600; }
+      .paid-subtext { color:#3F8D5E; font-weight:600; }
 
       .icon-btn { background:none; border:none; color:#8C8470; cursor:pointer; padding:4px; border-radius:6px; display:flex; }
       .icon-btn:hover { background:#F1ECD8; }
