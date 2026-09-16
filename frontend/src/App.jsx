@@ -256,10 +256,10 @@ export default function App() {
     try {
       const created = await api.createReservation(r);
       setData((d) => ({ ...d, reservations: [...d.reservations, created] }));
-      return true;
+      return created;
     } catch (e) {
       showToast(e.message);
-      return false;
+      return null;
     }
   };
   const updateReservation = async (id, patch) => {
@@ -795,13 +795,17 @@ export default function App() {
       {modal?.type === "reservation" && (
         <ReservationModal
           clients={data.clients}
-          items={itemsWithStatus.filter((i) => i.status === "available")}
+          items={itemsWithStatus.filter((i) => i.status !== "service")}
           onClose={() => setModal(null)}
           onSave={async (r) => {
-            const ok = await addReservation(r);
-            if (ok) {
+            const created = await addReservation(r);
+            if (created) {
               setModal(null);
-              showToast("Výpůjčka vytvořena");
+              showToast(
+                created.status === "pending"
+                  ? "Nezávazná rezervace vytvořena — schval ji, až bude pomůcka volná"
+                  : "Výpůjčka vytvořena"
+              );
             }
           }}
         />
@@ -1041,7 +1045,7 @@ function Dashboard({ stats, items, clients, reservations, onGoto, onApprove, onR
         Nové žádosti o rezervaci{pendingReservations.length > 0 ? ` (${pendingReservations.length})` : ""}
       </div>
       {pendingReservations.length === 0 ? (
-        <Empty text="Zatím žádné nevyřízené žádosti z veřejné stránky." />
+        <Empty text="Zatím žádné nevyřízené žádosti ani nezávazné rezervace." />
       ) : (
         <div className="grid-cards">
           {pendingReservations.map((r) => {
@@ -1213,7 +1217,7 @@ function ItemModal({ onClose, onSave, initial }) {
 }
 
 function ReservationModal({ clients, items, onClose, onSave }) {
-  const rentable = items.filter((i) => i.availableQty > 0 && !i.serviceFlag);
+  const rentable = items.filter((i) => !i.serviceFlag);
   const [clientId, setClientId] = useState(clients[0]?.id || "");
   const [itemId, setItemId] = useState(rentable[0]?.id || "");
   const [quantity, setQuantity] = useState("1");
@@ -1225,6 +1229,8 @@ function ReservationModal({ clients, items, onClose, onSave }) {
   const [deposit, setDeposit] = useState("");
   // null = cena se řídí ceníkem automaticky; jinak ruční přepis (např. domluvená sleva s klientem)
   const [priceOverride, setPriceOverride] = useState(null);
+  // pomůcka je teď celá půjčená — klient si i tak chce počkat na uvolnění
+  const [nonBindingConfirmed, setNonBindingConfirmed] = useState(false);
 
   const selectedItem = rentable.find((i) => i.id === itemId);
   const qtyNum = Math.max(1, Number(quantity) || 1);
@@ -1233,15 +1239,21 @@ function ReservationModal({ clients, items, onClose, onSave }) {
   const computedPrice = selectedItem ? days * qtyNum * rate : 0;
   const price = priceOverride !== null ? Number(priceOverride) || 0 : computedPrice;
   const priceFieldValue = priceOverride !== null ? priceOverride : String(computedPrice);
+  const notEnoughNow = selectedItem ? qtyNum > selectedItem.availableQty : false;
 
   const canSave =
-    clientId && itemId && startDate && (openEnded || (endDate && endDate >= startDate)) && qtyNum <= (selectedItem?.availableQty || 0);
+    clientId &&
+    itemId &&
+    startDate &&
+    (openEnded || (endDate && endDate >= startDate)) &&
+    qtyNum <= (selectedItem?.quantityTotal || 0) &&
+    (!notEnoughNow || nonBindingConfirmed);
 
   return (
     <Modal title="Nová výpůjčka" onClose={onClose}>
       {clients.length === 0 || rentable.length === 0 ? (
         <div className="empty">
-          {clients.length === 0 ? "Nejprve přidejte klienta." : "Žádná pomůcka není momentálně k dispozici skladem."}
+          {clients.length === 0 ? "Nejprve přidejte klienta." : "Zatím nemáte žádné pomůcky."}
         </div>
       ) : (
         <>
@@ -1252,8 +1264,18 @@ function ReservationModal({ clients, items, onClose, onSave }) {
           </Field>
           <div className="field-row">
             <Field label="Pomůcka *">
-              <select value={itemId} onChange={(e) => setItemId(e.target.value)}>
-                {rentable.map((i) => <option key={i.id} value={i.id}>{i.name} (volno {i.availableQty})</option>)}
+              <select
+                value={itemId}
+                onChange={(e) => {
+                  setItemId(e.target.value);
+                  setNonBindingConfirmed(false);
+                }}
+              >
+                {rentable.map((i) => (
+                  <option key={i.id} value={i.id}>
+                    {i.name} {i.availableQty > 0 ? `(volno ${i.availableQty})` : "(momentálně půjčeno)"}
+                  </option>
+                ))}
               </select>
             </Field>
             <Field label="Počet kusů">
@@ -1310,8 +1332,24 @@ function ReservationModal({ clients, items, onClose, onSave }) {
                   Použít cenu dle ceníku ({czk(computedPrice)})
                 </button>
               )}
-              {qtyNum > selectedItem.availableQty && (
-                <div className="price-warn">K dispozici je jen {selectedItem.availableQty} ks.</div>
+              {notEnoughNow && qtyNum <= selectedItem.quantityTotal && (
+                <>
+                  <div className="price-warn">
+                    Momentálně k dispozici jen {selectedItem.availableQty} ks (celkem appka eviduje{" "}
+                    {selectedItem.quantityTotal} ks) — pomůcka je teď půjčená.
+                  </div>
+                  <label className="checkbox-row">
+                    <input
+                      type="checkbox"
+                      checked={nonBindingConfirmed}
+                      onChange={(e) => setNonBindingConfirmed(e.target.checked)}
+                    />
+                    Přesto vytvořit jako nezávaznou rezervaci — schválíš ji, až se pomůcka uvolní
+                  </label>
+                </>
+              )}
+              {notEnoughNow && qtyNum > selectedItem.quantityTotal && (
+                <div className="price-warn">Appka eviduje jen {selectedItem.quantityTotal} ks celkem.</div>
               )}
             </div>
           )}
@@ -1329,10 +1367,11 @@ function ReservationModal({ clients, items, onClose, onSave }) {
                   endDate: openEnded ? null : endDate,
                   deposit: Number(deposit) || 0,
                   price,
+                  nonBinding: notEnoughNow,
                 })
               }
             >
-              Vytvořit výpůjčku
+              {notEnoughNow ? "Vytvořit nezávaznou rezervaci" : "Vytvořit výpůjčku"}
             </button>
           </div>
         </>
