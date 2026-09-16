@@ -43,6 +43,7 @@ export function mapPayment(row) {
   return {
     id: row.id,
     clientId: row.client_id,
+    reservationId: row.reservation_id,
     date: row.date,
     amount: row.amount,
     method: row.method || "",

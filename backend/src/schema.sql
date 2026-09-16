@@ -63,6 +63,8 @@ ALTER TABLE reservations ALTER COLUMN end_date DROP NOT NULL;
 CREATE TABLE IF NOT EXISTS payments (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   client_id UUID REFERENCES clients(id) ON DELETE SET NULL,
+  -- nepovinné — platba se dá zapsat i bez vazby na konkrétní výpůjčku
+  reservation_id UUID REFERENCES reservations(id) ON DELETE SET NULL,
   date DATE NOT NULL DEFAULT CURRENT_DATE,
   amount INTEGER NOT NULL DEFAULT 0,
   method TEXT,
@@ -71,7 +73,11 @@ CREATE TABLE IF NOT EXISTS payments (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Propojení plateb s výpůjčkou i v databázi založené před touto verzí.
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS reservation_id UUID REFERENCES reservations(id) ON DELETE SET NULL;
+
 CREATE INDEX IF NOT EXISTS idx_reservations_client ON reservations(client_id);
 CREATE INDEX IF NOT EXISTS idx_reservations_item ON reservations(item_id);
 CREATE INDEX IF NOT EXISTS idx_reservations_status ON reservations(status);
 CREATE INDEX IF NOT EXISTS idx_payments_client ON payments(client_id);
+CREATE INDEX IF NOT EXISTS idx_payments_reservation ON payments(reservation_id);

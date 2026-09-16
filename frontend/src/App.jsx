@@ -170,6 +170,16 @@ export default function App() {
   const clientById = (id) => data.clients.find((c) => c.id === id);
   const itemById = (id) => itemsWithStatus.find((i) => i.id === id);
 
+  // kolik už bylo na kterou výpůjčku zaplaceno (součet plateb s touto vazbou)
+  const paidByReservation = useMemo(() => {
+    const map = {};
+    data.payments.forEach((p) => {
+      if (!p.reservationId) return;
+      map[p.reservationId] = (map[p.reservationId] || 0) + Number(p.amount || 0);
+    });
+    return map;
+  }, [data.payments]);
+
   const stats = useMemo(() => {
     const totalItems = data.items.length;
     // počet aktivních výpůjček (ne počet různých druhů pomůcek — to by při
@@ -638,6 +648,9 @@ export default function App() {
                             ) : (
                               czk(r.price)
                             )}
+                            {paidByReservation[r.id] > 0 && (
+                              <div className="table-subtext paid-subtext">zaplaceno {czk(paidByReservation[r.id])}</div>
+                            )}
                           </td>
                           <td>
                             {r.status === "pending" || r.status === "rejected" ? (
@@ -690,6 +703,15 @@ export default function App() {
                                   <RotateCcw size={14} /> Vrátit zpět
                                 </button>
                               )}
+                              {r.status !== "rejected" && (
+                                <button
+                                  className="link-btn"
+                                  onClick={() => setModal({ type: "payment", reservationId: r.id })}
+                                  title="Zaznamenat platbu k této výpůjčce"
+                                >
+                                  <Wallet size={14} /> Platba
+                                </button>
+                              )}
                               {(r.status === "active" || r.status === "pending") && (
                                 <button
                                   className="icon-btn"
@@ -735,7 +757,14 @@ export default function App() {
                       .map((p) => (
                         <tr key={p.id}>
                           <td className="mono">{fmtDate(p.date)}</td>
-                          <td>{clientById(p.clientId)?.name || "—"}</td>
+                          <td>
+                            {clientById(p.clientId)?.name || "—"}
+                            {p.reservationId && (
+                              <div className="table-subtext">
+                                {itemById(data.reservations.find((r) => r.id === p.reservationId)?.itemId)?.name || "výpůjčka"}
+                              </div>
+                            )}
+                          </td>
                           <td className="mono">{czk(p.amount)}</td>
                           <td>{p.method}</td>
                           <td className="mono">{p.variableSymbol || "—"}</td>
@@ -843,6 +872,18 @@ export default function App() {
       {modal?.type === "payment" && (
         <PaymentModal
           clients={data.clients}
+          reservation={(() => {
+            const r = modal.reservationId && data.reservations.find((res) => res.id === modal.reservationId);
+            if (!r) return null;
+            return {
+              id: r.id,
+              clientId: r.clientId,
+              price: r.price,
+              alreadyPaid: paidByReservation[r.id] || 0,
+              item: data.items.find((i) => i.id === r.itemId),
+              client: clientById(r.clientId),
+            };
+          })()}
           onClose={() => setModal(null)}
           onSave={async (p) => {
             const ok = await addPayment(p);
@@ -1561,9 +1602,10 @@ function ReturnReservationModal({ reservation, item, client, onClose, onSave }) 
   );
 }
 
-function PaymentModal({ clients, onClose, onSave }) {
-  const [clientId, setClientId] = useState(clients[0]?.id || "");
-  const [amount, setAmount] = useState("");
+function PaymentModal({ clients, reservation, onClose, onSave }) {
+  const remaining = reservation ? Math.max(0, reservation.price - reservation.alreadyPaid) : 0;
+  const [clientId, setClientId] = useState(reservation?.clientId || clients[0]?.id || "");
+  const [amount, setAmount] = useState(reservation ? String(remaining || reservation.price || "") : "");
   const [method, setMethod] = useState("Hotově");
   const [variableSymbol, setVariableSymbol] = useState("");
   const [note, setNote] = useState("");
@@ -1573,11 +1615,23 @@ function PaymentModal({ clients, onClose, onSave }) {
         <div className="empty">Nejprve přidejte klienta.</div>
       ) : (
         <>
-          <Field label="Klient *">
-            <select value={clientId} onChange={(e) => setClientId(e.target.value)}>
-              {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-          </Field>
+          {reservation ? (
+            <div className="price-box">
+              <div className="price-row">
+                Platba k výpůjčce: <strong>{reservation.item?.name || "—"}</strong> — {reservation.client?.name}
+              </div>
+              <div className="price-row">
+                Cena {czk(reservation.price)}
+                {reservation.alreadyPaid > 0 && ` · dosud zaplaceno ${czk(reservation.alreadyPaid)} · zbývá ${czk(remaining)}`}
+              </div>
+            </div>
+          ) : (
+            <Field label="Klient *">
+              <select value={clientId} onChange={(e) => setClientId(e.target.value)}>
+                {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </Field>
+          )}
           <div className="field-row">
             <Field label="Částka (Kč) *">
               <input inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value.replace(/\D/g, ""))} placeholder="300" />
@@ -1590,9 +1644,11 @@ function PaymentModal({ clients, onClose, onSave }) {
               </select>
             </Field>
           </div>
-          <Field label="Variabilní symbol">
-            <input inputMode="numeric" value={variableSymbol} onChange={(e) => setVariableSymbol(e.target.value.replace(/\D/g, ""))} placeholder="např. telefon nebo číslo výpůjčky" />
-          </Field>
+          {!reservation && (
+            <Field label="Variabilní symbol">
+              <input inputMode="numeric" value={variableSymbol} onChange={(e) => setVariableSymbol(e.target.value.replace(/\D/g, ""))} placeholder="např. telefon nebo číslo výpůjčky" />
+            </Field>
+          )}
           <Field label="Poznámka">
             <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Kauce za vozík" />
           </Field>
@@ -1600,7 +1656,16 @@ function PaymentModal({ clients, onClose, onSave }) {
             <button
               className="btn btn-primary"
               disabled={!clientId || !amount}
-              onClick={() => onSave({ clientId, amount: Number(amount), method, variableSymbol, note })}
+              onClick={() =>
+                onSave({
+                  clientId,
+                  reservationId: reservation?.id || undefined,
+                  amount: Number(amount),
+                  method,
+                  variableSymbol,
+                  note,
+                })
+              }
             >
               Uložit platbu
             </button>
@@ -1718,6 +1783,7 @@ export function Style() {
       .link-btn-danger { color:#B5482F; }
       .row-actions { display:flex; align-items:center; gap:10px; white-space:nowrap; }
       .table-subtext { font-size:11px; color:#8C8470; margin-top:2px; }
+      .table-subtext.paid-subtext { color:#3F8D5E; font-weight:600; }
 
       .icon-btn { background:none; border:none; color:#8C8470; cursor:pointer; padding:4px; border-radius:6px; display:flex; }
       .icon-btn:hover { background:#F1ECD8; }
