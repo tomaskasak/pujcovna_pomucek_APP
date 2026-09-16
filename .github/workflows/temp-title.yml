@@ -1,0 +1,22 @@
+name: TEMP check website title/branding
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch homepage title and header
+        run: |
+          curl -sS "https://reharentkrkonose.cz/" -o home.html
+          echo "--- <title> ---"
+          grep -o '<title>[^<]*</title>' home.html || true
+          echo "--- meta og:site_name / og:title ---"
+          grep -o '<meta[^>]*property="og:site_name"[^>]*>' home.html || true
+          grep -o '<meta[^>]*property="og:title"[^>]*>' home.html || true
+          echo "--- první h1/h2 ---"
+          grep -o '<h1[^>]*>[^<]*</h1>' home.html | head -3 || true
+          grep -o '<h2[^>]*>[^<]*</h2>' home.html | head -3 || true
+          echo "--- site-title / logo text tridy ---"
+          grep -o 'class="[^"]*site-title[^"]*"[^>]*>[^<]*' home.html | head -5 || true
