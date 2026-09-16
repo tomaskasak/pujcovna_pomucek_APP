@@ -40,7 +40,7 @@ export default function PublicPage() {
       <Style />
       <main className="main" style={{ width: "100%" }}>
         <header className="topbar">
-          <h1>Veřejný přehled — Půjčovna rehabilitačních pomůcek</h1>
+          <h1>REHARENT Krkonoše — Půjčovna rehabilitačních pomůcek a motodlah</h1>
         </header>
         <div className="content">
           {error && <Empty text={error} />}

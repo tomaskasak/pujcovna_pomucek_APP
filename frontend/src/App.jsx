@@ -433,7 +433,7 @@ export default function App() {
           <img className="brand-mark" src="/icon-512.png" alt="REHARENT Krkonoše" />
           <div>
             <div className="brand-title">REHARENT Krkonoše</div>
-            <div className="brand-sub">Půjčovna pomůcek</div>
+            <div className="brand-sub">Půjčovna rehabilitačních pomůcek a motodlah</div>
           </div>
         </div>
         <nav className="nav">
@@ -955,7 +955,7 @@ function LoginScreen({ onLoggedIn }) {
           <img className="brand-mark" src="/icon-512.png" alt="REHARENT Krkonoše" />
           <div>
             <div className="brand-title" style={{ color: "#20281F" }}>REHARENT Krkonoše</div>
-            <div className="card-sub">Půjčovna pomůcek</div>
+            <div className="card-sub">Půjčovna rehabilitačních pomůcek a motodlah</div>
           </div>
         </div>
 

@@ -1,7 +1,7 @@
 {
-  "name": "Půjčovna rehabilitačních pomůcek",
-  "short_name": "Půjčovna",
-  "description": "Správa půjčovny rehabilitačních pomůcek — klienti, sklad, výpůjčky a platby.",
+  "name": "REHARENT Krkonoše — Půjčovna rehabilitačních pomůcek a motodlah",
+  "short_name": "REHARENT",
+  "description": "Správa půjčovny rehabilitačních pomůcek a motodlah — klienti, sklad, výpůjčky a platby.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
