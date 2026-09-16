@@ -1,0 +1,12 @@
+name: TEMP inspect protection headers
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch headers of pricelist page
+        run: |
+          curl -sS -D - -o /dev/null "https://reharentkrkonose.cz/cenik-sluzeb-pujcovna-rehabilitacnich-pomucek/"
