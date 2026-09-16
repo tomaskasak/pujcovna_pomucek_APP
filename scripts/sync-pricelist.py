@@ -131,8 +131,12 @@ def main():
         headers={"Content-Type": "application/json"},
         method="POST",
     )
-    with urllib.request.urlopen(req) as resp:
-        result = json.loads(resp.read().decode("utf-8"))
+    try:
+        with urllib.request.urlopen(req) as resp:
+            result = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        print(f"HTTP {e.code}: {e.read().decode('utf-8', 'replace')}")
+        raise
 
     print(f"Nalezeno položek: {len(items)}")
     print(f"Aktualizováno: {result.get('updated')}")
