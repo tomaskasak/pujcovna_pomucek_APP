@@ -45,31 +45,4 @@ router.get(
   })
 );
 
-// DOČASNÉ — appka na Renderu se na veřejný web dostane (na rozdíl od
-// vývojového sandboxu), takhle si přes ni jde ověřit, jak reálně vypadá HTML
-// stránky s ceníkem, aby šlo napsat skutečný parser. Po dokončení se má
-// tenhle route zase odstranit.
-router.get(
-  "/inspect-pricelist",
-  asyncHandler(async (req, res) => {
-    if (!process.env.CRON_SECRET || req.query.secret !== process.env.CRON_SECRET) {
-      return res.status(403).json({ error: "Neplatný nebo chybějící token." });
-    }
-    const url = "https://reharentkrkonose.cz/cenik-sluzeb-pujcovna-rehabilitacnich-pomucek/";
-    const pageRes = await fetch(url);
-    const html = await pageRes.text();
-    // odstranit script/style a nechat jen text + zachovat základní strukturu tabulek/seznamů
-    const text = html
-      .replace(/<script[\s\S]*?<\/script>/gi, "")
-      .replace(/<style[\s\S]*?<\/style>/gi, "")
-      .replace(/<\/(tr|li|p|h[1-6]|div)>/gi, "\n")
-      .replace(/<td[^>]*>/gi, " | ")
-      .replace(/<[^>]+>/g, "")
-      .replace(/&nbsp;/g, " ")
-      .replace(/\n{2,}/g, "\n")
-      .trim();
-    res.json({ ok: true, status: pageRes.status, textLength: text.length, text: text.slice(0, 15000) });
-  })
-);
-
 export default router;

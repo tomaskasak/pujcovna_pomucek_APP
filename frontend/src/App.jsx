@@ -243,7 +243,7 @@ export default function App() {
         return;
       }
       setData((d) => ({ ...d, items: [...d.items, ...added] }));
-      showToast("Ceník načten — doplňte prosím počty kusů skladem");
+      showToast("Uložený ceník načten — doplňte prosím počty kusů skladem");
     } catch (e) {
       showToast(e.message || "Načtení ceníku se nezdařilo.");
     }
@@ -482,8 +482,8 @@ export default function App() {
               )}
               {tab === "items" && (
                 <>
-                  <button className="btn btn-ghost" onClick={seedPriceList}>
-                    Načíst ceník z webu
+                  <button className="btn btn-ghost" onClick={seedPriceList} title="Doplní pomůcky podle uloženého ceníku v appce (ne živě z webu)">
+                    Načíst uložený ceník
                   </button>
                   <button className="btn btn-primary" onClick={() => setModal({ type: "item" })}>
                     <Plus size={16} /> Pomůcka
