@@ -10,15 +10,15 @@ export const OFFICIAL_PRICELIST = [
   { name: "Zvedák pro přesun osob", category: "Zvedáky", dailyRate: 30 },
   { name: "Antidekubitní matrace (nafukovací s kompresorem)", category: "Matrace", dailyRate: 15 },
   { name: "Elektrický vozík", category: "Vozíky", dailyRate: 80 },
-  { name: "Schodolez pásový", category: "Schodolezy", dailyRate: 30 },
+  { name: "Schodolez pásový", category: "Schodolezy", dailyRate: 60 },
   {
     name: "Motodlaha",
     category: "Motodlahy",
-    dailyRate: 250,
+    dailyRate: 280,
     priceTiers: [
-      { days: 1, rate: 250 },
-      { days: 14, rate: 230 },
-      { days: 30, rate: 200 },
+      { days: 1, rate: 280 },
+      { days: 14, rate: 250 },
+      { days: 30, rate: 220 },
     ],
   },
   // Polohovací postele — dle ceníku pouze měsíční sazba (min. doba zápůjčky 1 měsíc), zde přepočteno na den

@@ -252,6 +252,27 @@ Průběh té naplánované úlohy jde kdykoli zkontrolovat na GitHubu v záložc
 **Actions**, a jde ji tam i ručně spustit tlačítkem "Run workflow" (pro
 vyzkoušení, není potřeba čekat na pondělí/čtvrtek).
 
+## Automatická aktualizace ceníku z webu
+
+Appka jednou týdně (v pondělí) sama stáhne aktuální ceník z
+reharentkrkonose.cz a podle něj aktualizuje ceny pomůcek — ať existujících
+(přepíše cenu), tak nových (přidá je). Ruční zadávání cen tím odpadá; stačí
+změnit ceny na webu a appka je do týdne převezme.
+
+Přímé volání webu z appky na Renderu blokuje ochrana **WEDOS.protection**
+(funguje jen z jiných sítí), proto to zařizuje samostatná naplánovaná úloha
+na GitHubu (`.github/workflows/sync-pricelist.yml`), která ceník stáhne a
+appce jen pošle výsledek přes chráněné API (`POST /api/cron/sync-pricelist`).
+Používá **stejný** `CRON_SECRET` jako týdenní přehled mailem výše — žádné
+další nastavení není potřeba.
+
+Jde ji kdykoli spustit ručně v záložce **Actions** na GitHubu (tlačítko "Run
+workflow"), stejně jako `keep-alive.yml`.
+
+Tlačítko "Načíst uložený ceník" v appce (sekce Pomůcky) je nezávislé —
+používá se jen jednou na úplně nový/prázdný katalog pomůcek a čte ze
+zabudovaného seznamu v appce (`backend/src/pricelist.js`), ne živě z webu.
+
 ## Přihlašování — jak přidat další účet
 
 Appka zatím nemá formulář pro registraci nových účtů (aby se zbytečně
