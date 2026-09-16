@@ -1338,7 +1338,7 @@ function ReservationModal({ clients, items, onClose, onSave }) {
                     Momentálně k dispozici jen {selectedItem.availableQty} ks (celkem appka eviduje{" "}
                     {selectedItem.quantityTotal} ks) — pomůcka je teď půjčená.
                   </div>
-                  <label className="checkbox-row">
+                  <label className="checkbox-row checkbox-row-loose">
                     <input
                       type="checkbox"
                       checked={nonBindingConfirmed}
@@ -1770,6 +1770,7 @@ export function Style() {
         margin: -4px 0 14px;
       }
       .checkbox-row input { margin:0; }
+      .checkbox-row.checkbox-row-loose { margin-top: 12px; }
 
       .tiers-box { background:#F7F2E4; border:1px solid #E8E0C8; border-radius:10px; padding:10px 12px; margin-bottom:14px; }
       .tier-row { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
