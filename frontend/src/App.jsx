@@ -1032,7 +1032,12 @@ export function PublicStockPage({ items, standalone, onReserve }) {
             {byCategory[cat].map((it) => (
               <div className="card public-card" key={it.id}>
                 <div className="card-title">{it.name}</div>
-                <div className="card-line mono">{czk(it.dailyRate)} / den</div>
+                <div className="card-line mono">
+                  {czk(it.dailyRate)} / den
+                  {it.priceTiers && it.priceTiers.length > 1 && (
+                    <span className="tier-hint"> · {it.priceTiers.slice(1).map((t) => `${t.days}+ dní: ${t.rate} Kč`).join(", ")}</span>
+                  )}
+                </div>
                 {it.availableQty > 0 ? (
                   <span className="stock-pill public-ok">Skladem {it.availableQty} ks</span>
                 ) : (
