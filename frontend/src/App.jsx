@@ -1953,6 +1953,7 @@ export function Style() {
       .reservation-success p { color:#6B6555; font-size:13.5px; margin: 6px 0 18px; }
 
       .avail-cal { background:#F7F2E4; border:1px solid #E8E0C8; border-radius:10px; padding:12px 14px; margin: 4px 0 14px; }
+      .avail-cal-hint { font-size:11.5px; color:#8C8470; margin-bottom:8px; }
       .avail-cal-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
       .avail-cal-head-title { font-size:13.5px; font-weight:600; color:#20281F; text-transform:capitalize; }
       .avail-cal-nav { background:none; border:1px solid #DDD3B8; border-radius:6px; width:26px; height:26px; display:flex; align-items:center; justify-content:center; cursor:pointer; color:#6B6555; }
@@ -1968,6 +1969,7 @@ export function Style() {
       .avail-day-booked { background:#FAECE7; color:#B5482F; cursor:default; }
       .avail-day-open { background:repeating-linear-gradient(45deg, #F6F0E4, #F6F0E4 4px, #EADFC4 4px, #EADFC4 8px); color:#8A6D3B; cursor:default; }
       .avail-day-selected { outline: 2px solid #2F5D3F; outline-offset: 1px; font-weight:700; }
+      .avail-day-inrange { background:#DCEEE3; }
       .avail-legend { display:flex; flex-wrap:wrap; gap:12px; margin-top:10px; }
       .avail-legend-item { display:flex; align-items:center; gap:5px; font-size:11px; color:#6B6555; }
       .avail-legend-dot { width:10px; height:10px; border-radius:3px; flex-shrink:0; }

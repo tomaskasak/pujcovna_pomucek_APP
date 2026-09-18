@@ -132,11 +132,13 @@ function dayStatus(iso, ranges) {
   return open ? "open" : "free";
 }
 
-// Kalendář dostupnosti — vizuálně ukáže, které dny jsou u pomůcky obsazené,
-// a kliknutím na volný den v budoucnu jde nastavit datum "od".
-function AvailabilityCalendar({ bookedRanges, selectedDate, onSelectDate }) {
+// Kalendář dostupnosti — vizuálně ukáže, které dny jsou u pomůcky obsazené.
+// Výběr termínu je na dva kliky: první klik nastaví "od", druhý (pozdější
+// den) nastaví "do" a vybarví se celý rozsah mezi nimi; klik před "od"
+// výběr restartuje na nový začátek.
+function AvailabilityCalendar({ bookedRanges, rangeStart, rangeEnd, onSelectDate }) {
   const today = todayISO();
-  const base = selectedDate && selectedDate >= today ? selectedDate : today;
+  const base = rangeStart && rangeStart >= today ? rangeStart : today;
   const [viewY, setViewY] = useState(Number(base.slice(0, 4)));
   const [viewM, setViewM] = useState(Number(base.slice(5, 7)) - 1); // 0-indexed
 
@@ -157,6 +159,7 @@ function AvailabilityCalendar({ bookedRanges, selectedDate, onSelectDate }) {
 
   return (
     <div className="avail-cal">
+      <div className="avail-cal-hint">Klikni na den "od", pak na den "do" — pro jeden den stačí kliknout jen jednou.</div>
       <div className="avail-cal-head">
         <button type="button" className="avail-cal-nav" onClick={goPrev} disabled={isCurrentMonth} aria-label="Předchozí měsíc">
           <ChevronLeft size={15} />
@@ -174,7 +177,14 @@ function AvailabilityCalendar({ bookedRanges, selectedDate, onSelectDate }) {
           const isPast = iso < today;
           const status = isPast ? "past" : dayStatus(iso, bookedRanges);
           const clickable = !isPast && status !== "booked";
-          const cls = ["avail-day", `avail-day-${status}`, iso === selectedDate ? "avail-day-selected" : ""]
+          const isEndpoint = iso === rangeStart || iso === rangeEnd;
+          const isInRange = rangeEnd && rangeEnd !== rangeStart && iso > rangeStart && iso < rangeEnd;
+          const cls = [
+            "avail-day",
+            `avail-day-${status}`,
+            isEndpoint ? "avail-day-selected" : "",
+            isInRange ? "avail-day-inrange" : "",
+          ]
             .filter(Boolean)
             .join(" ");
           return (
@@ -204,6 +214,27 @@ function ReservationRequestModal({ item, onClose, onSubmitted }) {
   const [endDate, setEndDate] = useState(todayISO());
   // klient často předem neví, kdy pomůcku vrátí — pak se datum "Do" nevyplňuje
   const [openEnded, setOpenEnded] = useState(false);
+  // výběr v kalendáři na dva kliky: "start" = další klik nastaví nové "od",
+  // "end" = další klik (pozdější den) dokončí rozsah nastavením "do"
+  const [calendarStep, setCalendarStep] = useState("start");
+
+  const handleCalendarSelect = (iso) => {
+    if (openEnded) {
+      setStartDate(iso);
+      return;
+    }
+    if (calendarStep === "start") {
+      setStartDate(iso);
+      setEndDate(iso);
+      setCalendarStep("end");
+    } else if (iso < startDate) {
+      setStartDate(iso);
+      setEndDate(iso);
+    } else {
+      setEndDate(iso);
+      setCalendarStep("start");
+    }
+  };
   const [quantity, setQuantity] = useState("1");
   const [clientName, setClientName] = useState("");
   const [clientPhone, setClientPhone] = useState("");
@@ -271,11 +302,9 @@ function ReservationRequestModal({ item, onClose, onSubmitted }) {
       <form onSubmit={handleSubmit}>
         <AvailabilityCalendar
           bookedRanges={item.bookedRanges || []}
-          selectedDate={startDate}
-          onSelectDate={(iso) => {
-            setStartDate(iso);
-            if (!openEnded && endDate < iso) setEndDate(iso);
-          }}
+          rangeStart={startDate}
+          rangeEnd={openEnded ? null : endDate}
+          onSelectDate={handleCalendarSelect}
         />
         <div className="field-row">
           <Field label="Od *">
@@ -292,7 +321,14 @@ function ReservationRequestModal({ item, onClose, onSubmitted }) {
           </Field>
         </div>
         <label className="checkbox-row">
-          <input type="checkbox" checked={openEnded} onChange={(e) => setOpenEnded(e.target.checked)} />
+          <input
+            type="checkbox"
+            checked={openEnded}
+            onChange={(e) => {
+              setOpenEnded(e.target.checked);
+              setCalendarStep("start");
+            }}
+          />
           Datum vrácení zatím nevím
         </label>
         <Field label={`Počet kusů${item.quantityTotal > 1 ? ` (celkem máme ${item.quantityTotal})` : ""}`}>
