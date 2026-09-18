@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Check, ChevronLeft, ChevronRight } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Phone, Mail } from "lucide-react";
 import { api } from "./api.js";
 import {
   Style,
@@ -41,6 +41,14 @@ export default function PublicPage() {
       <main className="main" style={{ width: "100%" }}>
         <header className="topbar">
           <h1>REHARENT Krkonoše — Půjčovna rehabilitačních pomůcek a motodlah</h1>
+          <div className="public-contact">
+            <a className="public-contact-link" href="tel:+420705919580">
+              <Phone size={15} /> +420 705 919 580
+            </a>
+            <a className="public-contact-link" href="mailto:info@reharentkrkonose.cz">
+              <Mail size={15} /> info@reharentkrkonose.cz
+            </a>
+          </div>
         </header>
         <div className="content">
           {error && <Empty text={error} />}

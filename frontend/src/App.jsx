@@ -1760,6 +1760,14 @@ export function Style() {
       .topbar h1 { font-family: Georgia, 'Times New Roman', serif; font-weight:600; font-size:22px; margin:0; }
       .topbar-actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
 
+      .public-contact { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+      .public-contact-link {
+        display:flex; align-items:center; gap:7px; font-size:13.5px; font-weight:600;
+        color:#2F5D3F; background:#EAF4EE; border:1px solid #CDE7D8; border-radius:20px;
+        padding:8px 14px; text-decoration:none;
+      }
+      .public-contact-link:hover { background:#DCEEE3; }
+
       .search { display:flex; align-items:center; gap:6px; background:#fff; border:1px solid #DDD3B8; border-radius:8px; padding:7px 10px; color:#6B6555; }
       .search input { border:none; outline:none; font-size:13px; background:transparent; width: 140px; }
 
