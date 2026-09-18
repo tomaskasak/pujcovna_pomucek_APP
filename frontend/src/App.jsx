@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
-import { Users, PackageSearch, CalendarClock, Wallet, Plus, X, Check, AlertTriangle, Search, Trash2, Globe, LogOut, Pencil, RotateCcw } from "lucide-react";
+import { Users, PackageSearch, CalendarClock, Wallet, Plus, X, Check, AlertTriangle, Search, Trash2, Globe, LogOut, Pencil, RotateCcw, ExternalLink, Copy } from "lucide-react";
 import { api, onUnauthorized } from "./api.js";
 
 const STATUS = {
@@ -32,6 +32,9 @@ export const daysBetween = (a, b) => Math.round((new Date(b) - new Date(a)) / 86
 export const czk = (n) => (n || 0).toLocaleString("cs-CZ") + " Kč";
 
 const emptyData = () => ({ clients: [], items: [], reservations: [], payments: [], services: [] });
+
+// Adresa veřejné stránky (bez přihlášení) ke sdílení s klienty, např. do SMS.
+const PUBLIC_URL = "https://pujcovna.reharentkrkonose.cz/verejny-prehled";
 
 function StampBadge({ status }) {
   const s = STATUS[status] || STATUS.available;
@@ -466,12 +469,14 @@ export default function App() {
       <main className="main">
         <header className="topbar">
           <h1>{titleFor(tab)}</h1>
-          {tab !== "dashboard" && tab !== "public" && (
+          {tab !== "dashboard" && (
             <div className="topbar-actions">
-              <div className="search">
-                <Search size={16} />
-                <input placeholder="Hledat…" value={query} onChange={(e) => setQuery(e.target.value)} />
-              </div>
+              {tab !== "public" && (
+                <div className="search">
+                  <Search size={16} />
+                  <input placeholder="Hledat…" value={query} onChange={(e) => setQuery(e.target.value)} />
+                </div>
+              )}
               {tab === "clients" && (
                 <button className="btn btn-primary" onClick={() => setModal({ type: "client" })}>
                   <Plus size={16} /> Klient
@@ -497,6 +502,24 @@ export default function App() {
                   <button className="btn btn-primary" onClick={() => setModal({ type: "payment" })}>
                     <Plus size={16} /> Platba
                   </button>
+                </>
+              )}
+              {tab === "public" && (
+                <>
+                  <button
+                    className="btn btn-ghost"
+                    onClick={() => {
+                      navigator.clipboard
+                        .writeText(PUBLIC_URL)
+                        .then(() => showToast("Odkaz zkopírován — vlož ho třeba do SMS"))
+                        .catch(() => showToast("Kopírování se nezdařilo"));
+                    }}
+                  >
+                    <Copy size={16} /> Kopírovat odkaz
+                  </button>
+                  <a className="btn btn-primary" href={PUBLIC_URL} target="_blank" rel="noopener noreferrer">
+                    <ExternalLink size={16} /> Otevřít veřejnou stránku
+                  </a>
                 </>
               )}
             </div>
