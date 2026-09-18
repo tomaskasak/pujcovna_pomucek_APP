@@ -43,8 +43,14 @@ export default function PublicPage() {
     <div className="app">
       <Style />
       <main className="main" style={{ width: "100%" }}>
-        <header className="topbar">
-          <h1>REHARENT Krkonoše — Půjčovna rehabilitačních pomůcek a motodlah</h1>
+        <header className="public-header">
+          <img className="brand-mark" src="/icon-512.png" alt="REHARENT Krkonoše" />
+          <div>
+            <div className="public-header-title">REHARENT Krkonoše</div>
+            <div className="public-header-sub">Půjčovna rehabilitačních pomůcek a motodlah</div>
+          </div>
+        </header>
+        <div className="content">
           <div className="public-contact">
             <a className="public-contact-link" href="tel:+420705919580">
               <Phone size={15} /> +420 705 919 580
@@ -53,8 +59,6 @@ export default function PublicPage() {
               <Mail size={15} /> info@reharentkrkonose.cz
             </a>
           </div>
-        </header>
-        <div className="content">
           {error && <Empty text={error} />}
           {!error && items === null && (
             <div className="loading-screen" style={{ minHeight: 200 }}>

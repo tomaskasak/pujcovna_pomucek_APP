@@ -1903,6 +1903,15 @@ export function Style() {
 
       .nav-divider { height:1px; background:rgba(255,255,255,0.1); margin: 10px 6px; }
 
+      .public-header {
+        display:flex; align-items:center; gap:14px;
+        background:#2F5D3F; color:#F3EFDC;
+        padding: 22px 28px;
+      }
+      .public-header .brand-mark { width:52px; height:52px; border-radius:11px; padding:4px; }
+      .public-header-title { font-family: Georgia, 'Times New Roman', serif; font-weight:600; font-size:20px; line-height:1.25; color:#fff; }
+      .public-header-sub { font-size:12.5px; color:#C7D9C0; margin-top:2px; }
+
       .public-page { max-width: 900px; }
       .public-note {
         display:flex; align-items:center; gap:8px; font-size:12px; color:#8A6D3B;
@@ -1973,6 +1982,7 @@ export function Style() {
         .sidebar-foot { display:none; }
         .content { padding: 18px 16px 50px; }
         .topbar { padding: 16px; }
+        .public-header { padding: 16px; }
       }
 
       /* Tabulka výpůjček se na mobilu na výšku vodorovně roluje — klient
