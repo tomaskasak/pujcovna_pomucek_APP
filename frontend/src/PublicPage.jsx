@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Check, ChevronLeft, ChevronRight, Phone, Mail } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Phone, Mail, Globe } from "lucide-react";
 import { api } from "./api.js";
 import {
   Style,
@@ -57,6 +57,9 @@ export default function PublicPage() {
             </a>
             <a className="public-contact-link" href="mailto:info@reharentkrkonose.cz">
               <Mail size={15} /> info@reharentkrkonose.cz
+            </a>
+            <a className="public-contact-link" href="https://reharentkrkonose.cz" target="_blank" rel="noopener noreferrer">
+              <Globe size={15} /> reharentkrkonose.cz
             </a>
           </div>
           {error && <Empty text={error} />}
