@@ -111,6 +111,10 @@ sám PostgreSQL databázi nezakládá — je potřeba mít vlastní Supabase pro
    `https://pujcovna-backend-xxxx.onrender.com` — tu si otevři v prohlížeči
    a přihlas se účtem z kroku 6.
 
+Appka navíc běží i na vlastní doméně **`https://pujcovna.reharentkrkonose.cz`**
+(nastavení viz sekce [Vlastní doména](#vlastní-doména) níže) — obě adresy
+vedou na stejnou appku, `onrender.com` adresa funguje dál taky.
+
 **Na co pamatovat u bezplatného tieru:**
 - Web služba na Renderu po ~15 minutách bez provozu „usne" a první další
   request ji pár desítek sekund budí — to je normální, ne chyba.
@@ -129,6 +133,22 @@ npm start
 
 Backend automaticky servíruje sestavený frontend z `frontend/dist`, takže
 celá appka běží na jednom portu (`PORT` z `.env`, výchozí 4000).
+
+## Vlastní doména
+
+Appka je dostupná i na `pujcovna.reharentkrkonose.cz` místo výchozí
+`onrender.com` adresy. Nastaveno jako:
+
+1. **Render** → služba `pujcovna-backend` → **Settings → Custom Domains** →
+   **Add Custom Domain** → `pujcovna.reharentkrkonose.cz`. Render ukáže
+   CNAME hodnotu k nastavení (typicky rovnou `pujcovna-backend.onrender.com`).
+2. **Wedos** → klientská zóna → doména `reharentkrkonose.cz` → **DNS**
+   → nový záznam: typ `CNAME`, název `pujcovna`, data = hodnota z kroku 1.
+   Po uložení nezapomenout kliknout **„aplikovat změny"** (Wedos DNS editor
+   změny jinak jen navrhne, nedošle je do provozu).
+3. Zpátky v Renderu kliknout **Verify** — může trvat od pár minut do
+   desítek minut, než se DNS změna propíše a Render doménu ověří a vystaví
+   jí certifikát.
 
 ## Přidání ikony na plochu (Android)
 
