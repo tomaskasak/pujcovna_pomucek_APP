@@ -39,6 +39,14 @@ export function mapReservation(row) {
   };
 }
 
+export function mapService(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    priceText: row.price_text,
+  };
+}
+
 export function mapPayment(row) {
   return {
     id: row.id,

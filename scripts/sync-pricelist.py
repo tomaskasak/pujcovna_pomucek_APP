@@ -124,7 +124,15 @@ def main():
                 }
             )
 
-    payload = json.dumps({"items": items}).encode("utf-8")
+    # Tabulka 3: doprava a služby — nestandardní ceny (za km, za hod...), jen text.
+    services = []
+    if len(tables) >= 3:
+        for row in tables[2]:
+            if len(row) < 2 or not row[0] or not row[1]:
+                continue
+            services.append({"name": row[0], "priceText": row[1]})
+
+    payload = json.dumps({"items": items, "services": services}).encode("utf-8")
     req = urllib.request.Request(
         f"{app_url}/api/cron/sync-pricelist?secret={secret}",
         data=payload,
@@ -141,6 +149,7 @@ def main():
     print(f"Nalezeno položek: {len(items)}")
     print(f"Aktualizováno: {result.get('updated')}")
     print(f"Nově přidáno: {result.get('added')}")
+    print(f"Doplňkových služeb: {result.get('services')}")
 
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { pool } from "../db.js";
 import { asyncHandler } from "../asyncHandler.js";
-import { mapReservation } from "../mappers.js";
+import { mapReservation, mapService } from "../mappers.js";
 import { effectiveRate, daysBetween } from "../pricing.js";
 import { notifyNewReservationRequest } from "../mailer.js";
 
@@ -49,6 +49,15 @@ router.get(
       });
 
     res.json(result);
+  })
+);
+
+// Doplňkové služby (doprava, montáž apod.) pro zobrazení na veřejné stránce.
+router.get(
+  "/services",
+  asyncHandler(async (req, res) => {
+    const { rows } = await pool.query(`SELECT * FROM services ORDER BY sort_order`);
+    res.json(rows.map(mapService));
   })
 );
 

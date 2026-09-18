@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { pool } from "../db.js";
 import { asyncHandler } from "../asyncHandler.js";
-import { mapClient, mapItem, mapReservation, mapPayment } from "../mappers.js";
+import { mapClient, mapItem, mapReservation, mapPayment, mapService } from "../mappers.js";
 
 const router = Router();
 
@@ -9,11 +9,12 @@ const router = Router();
 router.get(
   "/",
   asyncHandler(async (req, res) => {
-    const [clients, items, reservations, payments] = await Promise.all([
+    const [clients, items, reservations, payments, services] = await Promise.all([
       pool.query(`SELECT * FROM clients ORDER BY created_at`),
       pool.query(`SELECT * FROM items ORDER BY created_at`),
       pool.query(`SELECT * FROM reservations ORDER BY created_at`),
       pool.query(`SELECT * FROM payments ORDER BY created_at`),
+      pool.query(`SELECT * FROM services ORDER BY sort_order`),
     ]);
 
     res.json({
@@ -21,6 +22,7 @@ router.get(
       items: items.rows.map(mapItem),
       reservations: reservations.rows.map(mapReservation),
       payments: payments.rows.map(mapPayment),
+      services: services.rows.map(mapService),
     });
   })
 );

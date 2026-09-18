@@ -84,7 +84,22 @@ router.post(
       }
     }
 
-    res.json({ ok: true, updated, added });
+    // Doplňkové služby (doprava, montáž apod.) — nemají denní sazbu, jen
+    // popisnou cenu, proto se při každé synchronizaci celé nahradí čerstvým
+    // seznamem z webu (žádné párování podle jména jako u pomůcek).
+    const services = Array.isArray(req.body?.services) ? req.body.services : [];
+    await pool.query(`DELETE FROM services`);
+    for (let i = 0; i < services.length; i++) {
+      const s = services[i];
+      if (!s.name || !s.priceText) continue;
+      await pool.query(`INSERT INTO services (name, price_text, sort_order) VALUES ($1, $2, $3)`, [
+        s.name,
+        s.priceText,
+        i,
+      ]);
+    }
+
+    res.json({ ok: true, updated, added, services: services.length });
   })
 );
 

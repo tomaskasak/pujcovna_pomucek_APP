@@ -76,6 +76,18 @@ CREATE TABLE IF NOT EXISTS payments (
 -- Propojení plateb s výpůjčkou i v databázi založené před touto verzí.
 ALTER TABLE payments ADD COLUMN IF NOT EXISTS reservation_id UUID REFERENCES reservations(id) ON DELETE SET NULL;
 
+-- Doplňkové služby s nestandardní cenou (doprava za km, montáž, výjezd
+-- technika apod.) — na rozdíl od items (denní/měsíční sazba) je tu cena
+-- jen popisný text. Plní a aktualizuje týdenní synchronizace ceníku z webu
+-- (viz routes/cron.js), řádky se při každé synchronizaci celé nahradí.
+CREATE TABLE IF NOT EXISTS services (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL,
+  price_text TEXT NOT NULL,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 CREATE INDEX IF NOT EXISTS idx_reservations_client ON reservations(client_id);
 CREATE INDEX IF NOT EXISTS idx_reservations_item ON reservations(item_id);
 CREATE INDEX IF NOT EXISTS idx_reservations_status ON reservations(status);

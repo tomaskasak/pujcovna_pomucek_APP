@@ -18,6 +18,7 @@ import {
 // ale samostatný veřejný endpoint bez cen a jmen klientů.
 export default function PublicPage() {
   const [items, setItems] = useState(null);
+  const [services, setServices] = useState([]);
   const [error, setError] = useState(null);
   const [reserveItem, setReserveItem] = useState(null); // pomůcka vybraná k rezervaci
 
@@ -33,6 +34,9 @@ export default function PublicPage() {
 
   useEffect(() => {
     loadItems();
+    // doplňkové služby nejsou pro zobrazení ceníku pomůcek kritické —
+    // při chybě se prostě jen nezobrazí, hlavní přehled to nezablokuje
+    api.getPublicServices().then(setServices).catch(() => {});
   }, []);
 
   return (
@@ -58,7 +62,20 @@ export default function PublicPage() {
             </div>
           )}
           {!error && items !== null && (
-            <PublicStockPage items={items} standalone onReserve={setReserveItem} />
+            <>
+              <PublicStockPage items={items} standalone onReserve={setReserveItem} />
+              {services.length > 0 && (
+                <div className="services-box">
+                  <div className="services-box-title">Doprava a služby</div>
+                  {services.map((s) => (
+                    <div className="services-box-row" key={s.id}>
+                      <span>{s.name}</span>
+                      <span className="mono">{s.priceText}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
           )}
         </div>
       </main>

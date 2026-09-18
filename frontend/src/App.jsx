@@ -31,7 +31,7 @@ export const fmtDate = (iso) => {
 export const daysBetween = (a, b) => Math.round((new Date(b) - new Date(a)) / 86400000);
 export const czk = (n) => (n || 0).toLocaleString("cs-CZ") + " Kč";
 
-const emptyData = () => ({ clients: [], items: [], reservations: [], payments: [] });
+const emptyData = () => ({ clients: [], items: [], reservations: [], payments: [], services: [] });
 
 function StampBadge({ status }) {
   const s = STATUS[status] || STATUS.available;
@@ -549,6 +549,17 @@ export default function App() {
             </div>
           )}
 
+          {tab === "items" && data.services.length > 0 && (
+            <div className="services-box">
+              <div className="services-box-title">Doprava a služby</div>
+              {data.services.map((s) => (
+                <div className="services-box-row" key={s.id}>
+                  <span>{s.name}</span>
+                  <span className="mono">{s.priceText}</span>
+                </div>
+              ))}
+            </div>
+          )}
           {tab === "items" && (
             <div className="grid-cards">
               {filteredItems.length === 0 && <Empty text="Zatím žádné pomůcky. Přidejte první kus." />}
@@ -1874,6 +1885,10 @@ export function Style() {
       .checkbox-row.checkbox-row-loose { margin-top: 12px; }
 
       .tiers-box { background:#F7F2E4; border:1px solid #E8E0C8; border-radius:10px; padding:10px 12px; margin-bottom:14px; }
+
+      .services-box { background:#F7F2E4; border:1px solid #E8E0C8; border-radius:10px; padding:12px 14px; margin-bottom:18px; }
+      .services-box-title { font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:#8C8470; font-weight:600; margin-bottom:8px; }
+      .services-box-row { display:flex; justify-content:space-between; gap:12px; font-size:13px; padding:4px 0; }
       .tier-row { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
       .tier-from { font-size:12.5px; color:#6B6555; display:flex; align-items:center; gap:5px; flex-shrink:0; }
       .tier-days { width:44px; border:1px solid #DDD3B8; border-radius:6px; padding:4px 6px; font-size:12.5px; text-align:center; background:#fff; color:#20281F; }

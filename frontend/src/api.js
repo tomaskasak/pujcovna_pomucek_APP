@@ -36,6 +36,7 @@ export const api = {
   login: (username, password) => request("/auth/login", { method: "POST", body: JSON.stringify({ username, password }) }),
   logout: () => request("/auth/logout", { method: "POST" }),
   getPublicItems: () => request("/public/items"),
+  getPublicServices: () => request("/public/services"),
   submitPublicReservation: (data) => request("/public/reservations", { method: "POST", body: JSON.stringify(data) }),
 
   getState: () => request("/state"),
