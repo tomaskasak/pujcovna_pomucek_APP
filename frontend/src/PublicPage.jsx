@@ -201,9 +201,10 @@ function AvailabilityCalendar({ bookedRanges, rangeStart, rangeEnd, onSelectDate
         })}
       </div>
       <div className="avail-legend">
-        <div className="avail-legend-item"><span className="avail-legend-dot" style={{ background: "#EAF4EE" }} /> volno</div>
-        <div className="avail-legend-item"><span className="avail-legend-dot" style={{ background: "#FAECE7" }} /> obsazeno</div>
-        <div className="avail-legend-item"><span className="avail-legend-dot" style={{ background: "#EADFC4" }} /> nejisté (flexibilní výpůjčka)</div>
+        <div className="avail-legend-item"><span className="avail-legend-dot" style={{ background: "#fff", border: "1px solid #E3DCC5" }} /> volno</div>
+        <div className="avail-legend-item"><span className="avail-legend-dot" style={{ background: "#2F5D3F" }} /> vybráno</div>
+        <div className="avail-legend-item"><span className="avail-legend-dot" style={{ background: "#DE7A5C" }} /> obsazeno</div>
+        <div className="avail-legend-item"><span className="avail-legend-dot" style={{ background: "#ECC97C" }} /> nejisté (flexibilní výpůjčka)</div>
       </div>
     </div>
   );

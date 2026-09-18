@@ -1961,15 +1961,15 @@ export function Style() {
       .avail-cal-grid { display:grid; grid-template-columns: repeat(7, 1fr); gap:3px; }
       .avail-cal-dow { font-size:10.5px; color:#8C8470; text-align:center; padding-bottom:4px; }
       .avail-day {
-        aspect-ratio: 1; border:none; border-radius:6px; font-size:12px; font-family:inherit;
-        display:flex; align-items:center; justify-content:center; cursor:pointer; background:#EAF4EE; color:#2F5D3F;
+        aspect-ratio: 1; border:1px solid #E3DCC5; border-radius:6px; font-size:12px; font-family:inherit;
+        display:flex; align-items:center; justify-content:center; cursor:pointer; background:#fff; color:#2F5D3F;
       }
-      .avail-day-blank { visibility:hidden; cursor:default; }
-      .avail-day-past { background:transparent; color:#C9C1AA; cursor:default; }
-      .avail-day-booked { background:#FAECE7; color:#B5482F; cursor:default; }
-      .avail-day-open { background:repeating-linear-gradient(45deg, #F6F0E4, #F6F0E4 4px, #EADFC4 4px, #EADFC4 8px); color:#8A6D3B; cursor:default; }
-      .avail-day-selected { outline: 2px solid #2F5D3F; outline-offset: 1px; font-weight:700; }
-      .avail-day-inrange { background:#DCEEE3; }
+      .avail-day-blank { visibility:hidden; cursor:default; border-color:transparent; }
+      .avail-day-past { background:transparent; color:#C9C1AA; border-color:transparent; cursor:default; }
+      .avail-day-booked { background:#DE7A5C; color:#fff; border-color:#DE7A5C; cursor:default; }
+      .avail-day-open { background:repeating-linear-gradient(45deg, #F3D9A0, #F3D9A0 4px, #ECC97C 4px, #ECC97C 8px); color:#5C4A1F; border-color:#E0B968; cursor:default; font-weight:600; }
+      .avail-day-inrange { background:#B9DDC4; border-color:#B9DDC4; font-weight:600; }
+      .avail-day-selected { background:#2F5D3F; border-color:#2F5D3F; color:#fff; font-weight:700; }
       .avail-legend { display:flex; flex-wrap:wrap; gap:12px; margin-top:10px; }
       .avail-legend-item { display:flex; align-items:center; gap:5px; font-size:11px; color:#6B6555; }
       .avail-legend-dot { width:10px; height:10px; border-radius:3px; flex-shrink:0; }
