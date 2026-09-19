@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
-import { Users, PackageSearch, CalendarClock, Wallet, Plus, X, Check, AlertTriangle, Search, Trash2, Globe, LogOut, Pencil, RotateCcw, ExternalLink, Copy } from "lucide-react";
+import { Users, PackageSearch, CalendarClock, Wallet, Plus, X, Check, AlertTriangle, Search, Trash2, Globe, LogOut, Pencil, RotateCcw, ExternalLink, Copy, MessageSquare } from "lucide-react";
 import { api, onUnauthorized } from "./api.js";
 
 const STATUS = {
@@ -515,13 +515,16 @@ export default function App() {
                     onClick={() => {
                       navigator.clipboard
                         .writeText(PUBLIC_SMS_TEXT)
-                        .then(() => showToast("Text s odkazem zkopírován — vlož ho třeba do SMS"))
+                        .then(() => showToast("Text s odkazem zkopírován"))
                         .catch(() => showToast("Kopírování se nezdařilo"));
                     }}
                   >
-                    <Copy size={16} /> Kopírovat odkaz pro SMS
+                    <Copy size={16} /> Kopírovat text
                   </button>
-                  <a className="btn btn-primary" href={PUBLIC_URL} target="_blank" rel="noopener noreferrer">
+                  <a className="btn btn-primary" href={`sms:?body=${encodeURIComponent(PUBLIC_SMS_TEXT)}`}>
+                    <MessageSquare size={16} /> Poslat SMS s odkazem
+                  </a>
+                  <a className="btn btn-ghost" href={PUBLIC_URL} target="_blank" rel="noopener noreferrer">
                     <ExternalLink size={16} /> Otevřít veřejnou stránku
                   </a>
                 </>
