@@ -35,6 +35,10 @@ const emptyData = () => ({ clients: [], items: [], reservations: [], payments: [
 
 // Adresa veřejné stránky (bez přihlášení) ke sdílení s klienty, např. do SMS.
 const PUBLIC_URL = "https://pujcovna.reharentkrkonose.cz/verejny-prehled";
+// Appka na Renderu po delší neaktivitě "usne" a první požadavek ji budí
+// (klidně i desítky vteřin) — do zprávy pro klienta se to proto rovnou
+// připomene, ať se nepolekne prázdné/načítající se stránky.
+const PUBLIC_SMS_TEXT = `Dostupnost pomůcek a rezervace – REHARENT Krkonoše: ${PUBLIC_URL}\n(první načtení stránky může výjimečně trvat až 30 vteřin, prosíme o chvíli strpení)`;
 
 function StampBadge({ status }) {
   const s = STATUS[status] || STATUS.available;
@@ -510,12 +514,12 @@ export default function App() {
                     className="btn btn-ghost"
                     onClick={() => {
                       navigator.clipboard
-                        .writeText(PUBLIC_URL)
-                        .then(() => showToast("Odkaz zkopírován — vlož ho třeba do SMS"))
+                        .writeText(PUBLIC_SMS_TEXT)
+                        .then(() => showToast("Text s odkazem zkopírován — vlož ho třeba do SMS"))
                         .catch(() => showToast("Kopírování se nezdařilo"));
                     }}
                   >
-                    <Copy size={16} /> Kopírovat odkaz
+                    <Copy size={16} /> Kopírovat odkaz pro SMS
                   </button>
                   <a className="btn btn-primary" href={PUBLIC_URL} target="_blank" rel="noopener noreferrer">
                     <ExternalLink size={16} /> Otevřít veřejnou stránku
