@@ -1,0 +1,12 @@
+name: TEMP check app health
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Health check backend
+        run: |
+          curl -sS -w "\nHTTP %{http_code}\n" --max-time 60 "https://pujcovna-backend.onrender.com/api/health"
