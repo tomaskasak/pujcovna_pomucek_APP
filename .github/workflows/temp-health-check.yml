@@ -1,0 +1,19 @@
+name: TEMP check app health
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Health check backend
+        run: |
+          echo "--- /api/health ---"
+          curl -sS -w "\nHTTP %{http_code}\n" --max-time 30 "https://pujcovna-backend.onrender.com/api/health" || true
+          echo "--- /api/state (bez prihlaseni, ocekavame 401) ---"
+          curl -sS -w "\nHTTP %{http_code}\n" --max-time 30 "https://pujcovna-backend.onrender.com/api/state" || true
+          echo "--- custom domena / ---"
+          curl -sS -o /dev/null -w "HTTP %{http_code}\n" --max-time 30 "https://pujcovna.reharentkrkonose.cz/" || true
+          echo "--- hlavni stranka (index.html) ---"
+          curl -sS --max-time 30 "https://pujcovna-backend.onrender.com/" | head -c 2000
