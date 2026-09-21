@@ -93,3 +93,15 @@ CREATE INDEX IF NOT EXISTS idx_reservations_item ON reservations(item_id);
 CREATE INDEX IF NOT EXISTS idx_reservations_status ON reservations(status);
 CREATE INDEX IF NOT EXISTS idx_payments_client ON payments(client_id);
 CREATE INDEX IF NOT EXISTS idx_payments_reservation ON payments(reservation_id);
+
+-- Supabase ke každé tabulce ve schématu "public" automaticky vystaví
+-- i veřejné REST API (PostgREST) — bez RLS by přes něj (s veřejným "anon"
+-- klíčem projektu) šlo číst i tabulku users (včetně password_hash). Appka
+-- se k databázi připojuje přímo přes vlastníka (roli z DATABASE_URL), na
+-- kterou se RLS nevztahuje, takže tohle appku nijak neomezí.
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE clients ENABLE ROW LEVEL SECURITY;
+ALTER TABLE items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE reservations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE payments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE services ENABLE ROW LEVEL SECURITY;
