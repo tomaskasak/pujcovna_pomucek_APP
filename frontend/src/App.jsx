@@ -178,14 +178,39 @@ export default function App() {
   const itemById = (id) => itemsWithStatus.find((i) => i.id === id);
 
   // kolik už bylo na kterou výpůjčku zaplaceno (součet plateb s touto vazbou)
-  const paidByReservation = useMemo(() => {
-    const map = {};
+  // a kdy naposledy — u dlouhodobých (měsíčních) výpůjček slouží k
+  // upozornění, že je čas zkontrolovat další měsíční platbu
+  const { paidByReservation, lastPaymentDateByReservation } = useMemo(() => {
+    const sums = {};
+    const lastDates = {};
     data.payments.forEach((p) => {
       if (!p.reservationId) return;
-      map[p.reservationId] = (map[p.reservationId] || 0) + Number(p.amount || 0);
+      sums[p.reservationId] = (sums[p.reservationId] || 0) + Number(p.amount || 0);
+      if (!lastDates[p.reservationId] || p.date > lastDates[p.reservationId]) {
+        lastDates[p.reservationId] = p.date;
+      }
     });
-    return map;
+    return { paidByReservation: sums, lastPaymentDateByReservation: lastDates };
   }, [data.payments]);
+
+  // dlouhodobé (typicky měsíční) výpůjčky, u kterých už 30+ dní neproběhla
+  // žádná zaznamenaná platba — ať se na pravidelnou fakturu/platbu nezapomene
+  const paymentDueReservations = useMemo(() => {
+    const today = todayISO();
+    return data.reservations
+      .filter((r) => r.status === "active")
+      .map((r) => {
+        const referenceDate = lastPaymentDateByReservation[r.id] || r.startDate;
+        const daysSincePayment = daysBetween(referenceDate, today);
+        return { reservation: r, daysSincePayment };
+      })
+      .filter((x) => x.daysSincePayment >= 30)
+      .sort((a, b) => b.daysSincePayment - a.daysSincePayment);
+  }, [data.reservations, lastPaymentDateByReservation]);
+  const paymentDueMap = useMemo(
+    () => Object.fromEntries(paymentDueReservations.map((x) => [x.reservation.id, x.daysSincePayment])),
+    [paymentDueReservations]
+  );
 
   const stats = useMemo(() => {
     const totalItems = data.items.length;
@@ -199,8 +224,16 @@ export default function App() {
       .filter((p) => p.date && p.date.startsWith(monthStart))
       .reduce((s, p) => s + Number(p.amount || 0), 0);
     const pendingRequests = data.reservations.filter((r) => r.status === "pending").length;
-    return { totalItems, rentedNow, overdue, revenueThisMonth, clients: data.clients.length, pendingRequests };
-  }, [data, itemsWithStatus]);
+    return {
+      totalItems,
+      rentedNow,
+      overdue,
+      revenueThisMonth,
+      clients: data.clients.length,
+      pendingRequests,
+      paymentDue: paymentDueReservations.length,
+    };
+  }, [data, itemsWithStatus, paymentDueReservations]);
 
   // ---- CRUD helpery — volají backend API, lokální stav aktualizují podle odpovědi ----
   const addClient = async (c) => {
@@ -540,6 +573,7 @@ export default function App() {
               items={itemsWithStatus}
               clients={data.clients}
               reservations={data.reservations}
+              paymentDueReservations={paymentDueReservations}
               onGoto={setTab}
               onApprove={approveReservation}
               onReject={rejectReservation}
@@ -691,6 +725,11 @@ export default function App() {
                             )}
                             {paidByReservation[r.id] > 0 && (
                               <div className="table-subtext paid-subtext">zaplaceno {czk(paidByReservation[r.id])}</div>
+                            )}
+                            {paymentDueMap[r.id] !== undefined && (
+                              <div className="table-subtext payment-due-subtext">
+                                zkontrolovat platbu ({paymentDueMap[r.id]} dní)
+                              </div>
                             )}
                           </td>
                           <td>
@@ -1121,7 +1160,7 @@ export function Empty({ text }) {
   return <div className="empty">{text}</div>;
 }
 
-function Dashboard({ stats, items, clients, reservations, onGoto, onApprove, onReject }) {
+function Dashboard({ stats, items, clients, reservations, paymentDueReservations, onGoto, onApprove, onReject }) {
   const overdueItems = items.filter((i) => i.hasOverdue);
   const pendingReservations = reservations.filter((r) => r.status === "pending");
   return (
@@ -1144,6 +1183,31 @@ function Dashboard({ stats, items, clients, reservations, onGoto, onApprove, onR
           <div className="stat-label">Tržby tento měsíc</div>
         </div>
       </div>
+
+      {stats.paymentDue > 0 && (
+        <>
+          <div className="section-title">Zkontrolovat měsíční platbu ({stats.paymentDue})</div>
+          <div className="grid-cards">
+            {paymentDueReservations.map(({ reservation: r, daysSincePayment }) => {
+              const item = items.find((i) => i.id === r.itemId);
+              const client = clients.find((c) => c.id === r.clientId);
+              return (
+                <div className="card" key={r.id}>
+                  <div className="card-row">
+                    <AlertTriangle size={16} color="#8A6D3B" />
+                    <div className="grow">
+                      <div className="card-title">{item?.name || "—"}</div>
+                      <div className="card-sub">
+                        {client?.name} · {daysSincePayment} dní bez zaznamenané platby
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
 
       <div className="section-title">
         Nové žádosti o rezervaci{pendingReservations.length > 0 ? ` (${pendingReservations.length})` : ""}
@@ -1860,6 +1924,7 @@ export function Style() {
       .row-actions { display:flex; align-items:center; gap:10px; white-space:nowrap; }
       .table-subtext { font-size:11px; color:#8C8470; margin-top:2px; }
       .paid-subtext { color:#3F8D5E; font-weight:600; }
+      .payment-due-subtext { color:#8A6D3B; font-weight:600; }
 
       .icon-btn { background:none; border:none; color:#8C8470; cursor:pointer; padding:4px; border-radius:6px; display:flex; }
       .icon-btn:hover { background:#F1ECD8; }
