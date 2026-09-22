@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
-import { Users, PackageSearch, CalendarClock, Wallet, Plus, X, Check, AlertTriangle, Search, Trash2, Globe, LogOut, Pencil, RotateCcw, ExternalLink, Copy, MessageSquare } from "lucide-react";
+import { Users, PackageSearch, CalendarClock, Wallet, Plus, X, Check, AlertTriangle, Search, Trash2, Globe, LogOut, Pencil, RotateCcw, ExternalLink, Copy, MessageSquare, Camera } from "lucide-react";
 import { api, onUnauthorized } from "./api.js";
 
 const STATUS = {
@@ -30,6 +30,39 @@ export const fmtDate = (iso) => {
 };
 export const daysBetween = (a, b) => Math.round((new Date(b) - new Date(a)) / 86400000);
 export const czk = (n) => (n || 0).toLocaleString("cs-CZ") + " Kč";
+
+// Zmenší a zkomprimuje fotku v prohlížeči před nahráním (přes canvas), ať se
+// do databáze neukládají několikamegabajtové fotky z mobilu zbytečně velké.
+function resizeImageFile(file, maxDim = 1200, quality = 0.82) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > maxDim || height > maxDim) {
+          if (width > height) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          } else {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext("2d").drawImage(img, 0, 0, width, height);
+        const dataUrl = canvas.toDataURL("image/jpeg", quality);
+        resolve({ data: dataUrl.split(",")[1], contentType: "image/jpeg" });
+      };
+      img.onerror = () => reject(new Error("Obrázek se nepodařilo načíst."));
+      img.src = e.target.result;
+    };
+    reader.onerror = () => reject(new Error("Soubor se nepodařilo přečíst."));
+    reader.readAsDataURL(file);
+  });
+}
 
 const emptyData = () => ({ clients: [], items: [], reservations: [], payments: [], services: [] });
 
@@ -278,7 +311,8 @@ export default function App() {
   const updateItem = async (id, patch) => {
     try {
       const updated = await api.updateItem(id, patch);
-      setData((d) => ({ ...d, items: d.items.map((i) => (i.id === id ? updated : i)) }));
+      // PUT /items/:id nevrací photoIds — zachovat je z předchozího stavu
+      setData((d) => ({ ...d, items: d.items.map((i) => (i.id === id ? { ...updated, photoIds: i.photoIds } : i)) }));
       return true;
     } catch (e) {
       showToast(e.message);
@@ -296,7 +330,30 @@ export default function App() {
   const setItemService = async (id, inService) => {
     try {
       const updated = await api.updateItem(id, { serviceFlag: inService });
-      setData((d) => ({ ...d, items: d.items.map((i) => (i.id === id ? updated : i)) }));
+      setData((d) => ({ ...d, items: d.items.map((i) => (i.id === id ? { ...updated, photoIds: i.photoIds } : i)) }));
+    } catch (e) {
+      showToast(e.message);
+    }
+  };
+  const addItemPhoto = async (id, file) => {
+    try {
+      const { data, contentType } = await resizeImageFile(file);
+      const { id: photoId } = await api.uploadItemPhoto(id, data, contentType);
+      setData((d) => ({
+        ...d,
+        items: d.items.map((i) => (i.id === id ? { ...i, photoIds: [...(i.photoIds || []), photoId] } : i)),
+      }));
+    } catch (e) {
+      showToast(e.message || "Fotku se nepodařilo nahrát.");
+    }
+  };
+  const removeItemPhoto = async (id, photoId) => {
+    try {
+      await api.deleteItemPhoto(id, photoId);
+      setData((d) => ({
+        ...d,
+        items: d.items.map((i) => (i.id === id ? { ...i, photoIds: (i.photoIds || []).filter((p) => p !== photoId) } : i)),
+      }));
     } catch (e) {
       showToast(e.message);
     }
@@ -635,6 +692,34 @@ export default function App() {
                       <div className="card-sub">{it.category || "bez kategorie"}</div>
                     </div>
                     <StampBadge status={it.status} />
+                  </div>
+                  <div className="photo-row">
+                    {(it.photoIds || []).map((photoId) => (
+                      <div className="photo-thumb" key={photoId}>
+                        <img src={`/api/public/photo/${photoId}`} alt={it.name} />
+                        <button
+                          type="button"
+                          className="photo-thumb-remove"
+                          onClick={() => removeItemPhoto(it.id, photoId)}
+                          title="Smazat fotku"
+                        >
+                          <X size={12} />
+                        </button>
+                      </div>
+                    ))}
+                    <label className="photo-add">
+                      <Camera size={16} />
+                      <input
+                        type="file"
+                        accept="image/*"
+                        hidden
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) addItemPhoto(it.id, file);
+                          e.target.value = "";
+                        }}
+                      />
+                    </label>
                   </div>
                   <div className="card-line mono">
                     {czk(it.dailyRate)} / den
@@ -1111,6 +1196,9 @@ export function PublicStockPage({ items, standalone, onReserve }) {
           <div className="grid-cards">
             {byCategory[cat].map((it) => (
               <div className="card public-card" key={it.id}>
+                {it.photoIds && it.photoIds.length > 0 && (
+                  <img className="public-card-photo" src={`/api/public/photo/${it.photoIds[0]}`} alt={it.name} />
+                )}
                 <div className="card-title">{it.name}</div>
                 <div className="card-line mono">
                   {czk(it.dailyRate)} / den
@@ -1960,6 +2048,19 @@ export function Style() {
       .field input:focus, .field select:focus, .field textarea:focus { border-color:#2F5D3F; }
       .field input::placeholder, .field textarea::placeholder { color:#9AA6A3; opacity:1; }
 
+      .photo-row { display:flex; gap:6px; flex-wrap:wrap; margin-top:10px; }
+      .photo-thumb { position:relative; width:56px; height:56px; border-radius:8px; overflow:hidden; border:1px solid #E8E0C8; flex-shrink:0; }
+      .photo-thumb img { width:100%; height:100%; object-fit:cover; display:block; }
+      .photo-thumb-remove {
+        position:absolute; top:2px; right:2px; width:16px; height:16px; border-radius:50%;
+        background:rgba(32,40,31,0.75); color:#fff; border:none; display:flex; align-items:center; justify-content:center; cursor:pointer; padding:0;
+      }
+      .photo-add {
+        width:56px; height:56px; border-radius:8px; border:1px dashed #C9BE9C; flex-shrink:0;
+        display:flex; align-items:center; justify-content:center; color:#8C8470; cursor:pointer; background:#F7F2E4;
+      }
+      .photo-add:hover { background:#F1ECD8; }
+
       .stock-row { display:flex; gap:6px; flex-wrap:wrap; margin-top:10px; }
       .stock-pill { font-family:'IBM Plex Mono', monospace; font-size:10.5px; background:#F7F2E4; color:#2E3A2C; padding:3px 8px; border-radius:20px; border:1px solid #E8E0C8; }
       .stock-pill.stock-empty { background:#FAECE7; color:#B5482F; border-color:#F0CFC4; }
@@ -2018,6 +2119,7 @@ export function Style() {
       .public-section { margin-bottom: 26px; }
       .public-cat-title { font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:#8C8470; margin-bottom:10px; font-weight:600; }
       .public-card { display:flex; flex-direction:column; gap:8px; }
+      .public-card-photo { width:100%; aspect-ratio: 4/3; object-fit:cover; border-radius:8px; margin-bottom:2px; }
       .public-ok { background:#EAF4EE; color:#3F8D5E; border-color:#CDE7D8; align-self:flex-start; }
       .public-reserve-btn { margin-top:2px; }
       .reservation-success { text-align:center; padding: 10px 4px 4px; }

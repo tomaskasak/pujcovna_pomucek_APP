@@ -12,7 +12,7 @@ const router = Router();
 router.get(
   "/items",
   asyncHandler(async (req, res) => {
-    const [items, agg, ranges] = await Promise.all([
+    const [items, agg, ranges, photos] = await Promise.all([
       pool.query(`SELECT * FROM items ORDER BY name`),
       pool.query(
         `SELECT item_id, COALESCE(SUM(quantity), 0) AS rented
@@ -25,11 +25,16 @@ router.get(
         `SELECT item_id, start_date, end_date FROM reservations
          WHERE status IN ('active', 'pending') ORDER BY start_date`
       ),
+      pool.query(`SELECT id, item_id FROM item_photos ORDER BY sort_order`),
     ]);
     const rentedByItem = Object.fromEntries(agg.rows.map((r) => [r.item_id, Number(r.rented)]));
     const rangesByItem = {};
     ranges.rows.forEach((r) => {
       (rangesByItem[r.item_id] = rangesByItem[r.item_id] || []).push({ start: r.start_date, end: r.end_date });
+    });
+    const photoIdsByItem = {};
+    photos.rows.forEach((p) => {
+      (photoIdsByItem[p.item_id] = photoIdsByItem[p.item_id] || []).push(p.id);
     });
 
     const result = items.rows
@@ -45,10 +50,23 @@ router.get(
           quantityTotal: it.quantity_total,
           availableQty,
           bookedRanges: rangesByItem[it.id] || [],
+          photoIds: photoIdsByItem[it.id] || [],
         };
       });
 
     res.json(result);
+  })
+);
+
+// Bez přihlášení — samotná fotka (appka u sebe fotky pomůcek nijak neskrývá).
+router.get(
+  "/photo/:id",
+  asyncHandler(async (req, res) => {
+    const { rows } = await pool.query(`SELECT data, content_type FROM item_photos WHERE id = $1`, [req.params.id]);
+    if (rows.length === 0) return res.status(404).end();
+    res.set("Content-Type", rows[0].content_type);
+    res.set("Cache-Control", "public, max-age=31536000, immutable");
+    res.send(rows[0].data);
   })
 );
 

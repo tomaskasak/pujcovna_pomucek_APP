@@ -48,6 +48,9 @@ export const api = {
   createItem: (data) => request("/items", { method: "POST", body: JSON.stringify(data) }),
   updateItem: (id, patch) => request(`/items/${id}`, { method: "PUT", body: JSON.stringify(patch) }),
   deleteItem: (id) => request(`/items/${id}`, { method: "DELETE" }),
+  uploadItemPhoto: (id, data, contentType) =>
+    request(`/items/${id}/photos`, { method: "POST", body: JSON.stringify({ data, contentType }) }),
+  deleteItemPhoto: (id, photoId) => request(`/items/${id}/photos/${photoId}`, { method: "DELETE" }),
 
   createReservation: (data) => request("/reservations", { method: "POST", body: JSON.stringify(data) }),
   updateReservation: (id, patch) => request(`/reservations/${id}`, { method: "PUT", body: JSON.stringify(patch) }),

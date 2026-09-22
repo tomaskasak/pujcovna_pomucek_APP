@@ -75,4 +75,42 @@ router.delete(
   })
 );
 
+// Nahrání fotky k pomůcce — appka posílá už zmenšený/zkomprimovaný obrázek
+// jako base64 (frontend to zmenší přes canvas před odesláním).
+router.post(
+  "/:id/photos",
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { data, contentType } = req.body || {};
+    if (!data || !contentType) {
+      return res.status(400).json({ error: "Chybí data fotky." });
+    }
+    const { rows: existing } = await pool.query(`SELECT 1 FROM items WHERE id = $1`, [id]);
+    if (existing.length === 0) {
+      return res.status(404).json({ error: "Pomůcka nenalezena." });
+    }
+    const { rows: countRows } = await pool.query(`SELECT count(*)::int AS n FROM item_photos WHERE item_id = $1`, [id]);
+    const buffer = Buffer.from(data, "base64");
+    const { rows } = await pool.query(
+      `INSERT INTO item_photos (item_id, data, content_type, sort_order) VALUES ($1, $2, $3, $4) RETURNING id`,
+      [id, buffer, contentType, countRows[0].n]
+    );
+    res.status(201).json({ id: rows[0].id });
+  })
+);
+
+router.delete(
+  "/:id/photos/:photoId",
+  asyncHandler(async (req, res) => {
+    const { rowCount } = await pool.query(`DELETE FROM item_photos WHERE id = $1 AND item_id = $2`, [
+      req.params.photoId,
+      req.params.id,
+    ]);
+    if (rowCount === 0) {
+      return res.status(404).json({ error: "Fotka nenalezena." });
+    }
+    res.status(204).end();
+  })
+);
+
 export default router;

@@ -31,6 +31,20 @@ CREATE TABLE IF NOT EXISTS items (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Fotky pomůcek — uložené přímo v databázi (žádné samostatné úložiště
+-- navíc), appka je zmenší/zkomprimuje v prohlížeči před nahráním, ať se
+-- databáze zbytečně nenafukuje.
+CREATE TABLE IF NOT EXISTS item_photos (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  item_id UUID NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+  data BYTEA NOT NULL,
+  content_type TEXT NOT NULL,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_item_photos_item ON item_photos(item_id);
+
 CREATE TABLE IF NOT EXISTS reservations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   -- klient se nesmí smazat, pokud má na sebe navázanou (i historickou) výpůjčku
@@ -105,3 +119,4 @@ ALTER TABLE items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE reservations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE payments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE services ENABLE ROW LEVEL SECURITY;
+ALTER TABLE item_photos ENABLE ROW LEVEL SECURITY;
