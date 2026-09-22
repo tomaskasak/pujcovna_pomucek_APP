@@ -2119,7 +2119,7 @@ export function Style() {
       .public-section { margin-bottom: 26px; }
       .public-cat-title { font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:#8C8470; margin-bottom:10px; font-weight:600; }
       .public-card { display:flex; flex-direction:column; gap:8px; }
-      .public-card-photo { width:100%; aspect-ratio: 4/3; object-fit:cover; border-radius:8px; margin-bottom:2px; }
+      .public-card-photo { width:100%; height:140px; object-fit:contain; object-position:center; background:#F7F2E4; border-radius:8px; margin-bottom:2px; }
       .public-ok { background:#EAF4EE; color:#3F8D5E; border-color:#CDE7D8; align-self:flex-start; }
       .public-reserve-btn { margin-top:2px; }
       .reservation-success { text-align:center; padding: 10px 4px 4px; }
