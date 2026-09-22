@@ -8,6 +8,7 @@ proto to dělá tahle GitHub Actions úloha.
 import base64
 import json
 import os
+import urllib.parse
 import urllib.request
 
 # url -> přesný název pomůcky v appce
@@ -24,7 +25,9 @@ def main():
     secret = os.environ["CRON_SECRET"]
 
     for url, item_name in PHOTOS.items():
-        with urllib.request.urlopen(url) as resp:
+        # URL obsahuje ne-ASCII znak (en dash "–"), potřeba ho procentově zakódovat
+        encoded_url = urllib.parse.quote(url, safe=":/?&=%")
+        with urllib.request.urlopen(encoded_url) as resp:
             raw = resp.read()
             content_type = resp.headers.get("Content-Type", "image/png")
 
