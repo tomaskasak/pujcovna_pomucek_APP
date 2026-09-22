@@ -1,0 +1,15 @@
+name: TEMP seed one item photo
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  seed:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Stahnout a poslat fotku appce
+        env:
+          APP_URL: https://pujcovna-backend.onrender.com
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: python3 scripts/seed-photo.py
