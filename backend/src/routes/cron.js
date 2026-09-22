@@ -103,34 +103,4 @@ router.post(
   })
 );
 
-// DOČASNÉ — jednorázový import další fotky z webu, viz scripts/seed-photo.py.
-router.post(
-  "/seed-photo",
-  asyncHandler(async (req, res) => {
-    if (!process.env.CRON_SECRET || req.query.secret !== process.env.CRON_SECRET) {
-      return res.status(403).json({ error: "Neplatný nebo chybějící token." });
-    }
-    const { itemName, data, contentType } = req.body || {};
-    if (!itemName || !data || !contentType) {
-      return res.status(400).json({ error: "Chybí itemName/data/contentType." });
-    }
-    const { rows: itemRows } = await pool.query(`SELECT id FROM items WHERE lower(name) = lower($1)`, [itemName]);
-    if (itemRows.length === 0) {
-      return res.status(404).json({ error: `Pomůcka "${itemName}" nenalezena.` });
-    }
-    const itemId = itemRows[0].id;
-    const { rows: countRows } = await pool.query(`SELECT count(*)::int AS n FROM item_photos WHERE item_id = $1`, [
-      itemId,
-    ]);
-    const buffer = Buffer.from(data, "base64");
-    await pool.query(`INSERT INTO item_photos (item_id, data, content_type, sort_order) VALUES ($1, $2, $3, $4)`, [
-      itemId,
-      buffer,
-      contentType,
-      countRows[0].n,
-    ]);
-    res.json({ ok: true });
-  })
-);
-
 export default router;
