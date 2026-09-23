@@ -103,19 +103,4 @@ router.post(
   })
 );
 
-// DOČASNÉ — ověření, že RLS je opravdu zapnuté na všech tabulkách.
-router.get(
-  "/check-rls",
-  asyncHandler(async (req, res) => {
-    if (!process.env.CRON_SECRET || req.query.secret !== process.env.CRON_SECRET) {
-      return res.status(403).json({ error: "Neplatný nebo chybějící token." });
-    }
-    const { rows } = await pool.query(
-      `SELECT relname AS table, relrowsecurity AS rls_enabled
-       FROM pg_class WHERE relnamespace = 'public'::regnamespace AND relkind = 'r' ORDER BY relname`
-    );
-    res.json(rows);
-  })
-);
-
 export default router;
