@@ -1,0 +1,12 @@
+name: TEMP check RLS status
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check RLS
+        run: |
+          curl -sS --max-time 60 "https://pujcovna-backend.onrender.com/api/cron/check-rls?secret=${{ secrets.CRON_SECRET }}" | python3 -m json.tool
