@@ -63,5 +63,6 @@ export const api = {
     request(`/reservations/${id}/payment-status`, { method: "PUT", body: JSON.stringify({ paymentStatus }) }),
 
   createPayment: (data) => request("/payments", { method: "POST", body: JSON.stringify(data) }),
+  updatePayment: (id, patch) => request(`/payments/${id}`, { method: "PUT", body: JSON.stringify(patch) }),
   deletePayment: (id) => request(`/payments/${id}`, { method: "DELETE" }),
 };

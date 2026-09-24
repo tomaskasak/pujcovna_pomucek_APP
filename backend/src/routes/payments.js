@@ -21,6 +21,35 @@ router.post(
   })
 );
 
+router.put(
+  "/:id",
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { rows: existingRows } = await pool.query(`SELECT * FROM payments WHERE id = $1`, [id]);
+    if (existingRows.length === 0) {
+      return res.status(404).json({ error: "Platba nenalezena." });
+    }
+    const existing = existingRows[0];
+    const patch = req.body || {};
+
+    const date = patch.date !== undefined ? patch.date : existing.date;
+    const amount = patch.amount !== undefined ? Number(patch.amount) || 0 : existing.amount;
+    const method = patch.method !== undefined ? patch.method || null : existing.method;
+    const variableSymbol = patch.variableSymbol !== undefined ? patch.variableSymbol || null : existing.variable_symbol;
+    const note = patch.note !== undefined ? patch.note || null : existing.note;
+
+    if (!(amount > 0)) {
+      return res.status(400).json({ error: "Částka musí být kladná." });
+    }
+
+    const { rows } = await pool.query(
+      `UPDATE payments SET date = $1, amount = $2, method = $3, variable_symbol = $4, note = $5 WHERE id = $6 RETURNING *`,
+      [date, amount, method, variableSymbol, note, id]
+    );
+    res.json(mapPayment(rows[0]));
+  })
+);
+
 router.delete(
   "/:id",
   asyncHandler(async (req, res) => {

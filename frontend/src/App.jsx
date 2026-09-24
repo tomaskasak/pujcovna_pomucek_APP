@@ -444,6 +444,16 @@ export default function App() {
       return false;
     }
   };
+  const updatePayment = async (id, patch) => {
+    try {
+      const updated = await api.updatePayment(id, patch);
+      setData((d) => ({ ...d, payments: d.payments.map((p) => (p.id === id ? updated : p)) }));
+      return true;
+    } catch (e) {
+      showToast(e.message);
+      return false;
+    }
+  };
   const removePayment = async (id) => {
     try {
       await api.deletePayment(id);
@@ -951,9 +961,18 @@ export default function App() {
                           <td className="mono">{p.variableSymbol || "—"}</td>
                           <td>{p.note}</td>
                           <td>
-                            <button className="icon-btn danger" onClick={() => removePayment(p.id)}>
-                              <Trash2 size={14} />
-                            </button>
+                            <div className="row-actions">
+                              <button
+                                className="icon-btn"
+                                onClick={() => setModal({ type: "payment", editId: p.id })}
+                                title="Upravit platbu"
+                              >
+                                <Pencil size={14} />
+                              </button>
+                              <button className="icon-btn danger" onClick={() => removePayment(p.id)}>
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -1054,6 +1073,8 @@ export default function App() {
       {modal?.type === "payment" && (
         <PaymentModal
           clients={data.clients}
+          clientById={clientById}
+          initial={modal.editId ? data.payments.find((p) => p.id === modal.editId) : null}
           reservation={(() => {
             const r = modal.reservationId && data.reservations.find((res) => res.id === modal.reservationId);
             if (!r) return null;
@@ -1068,10 +1089,10 @@ export default function App() {
           })()}
           onClose={() => setModal(null)}
           onSave={async (p) => {
-            const ok = await addPayment(p);
+            const ok = modal.editId ? await updatePayment(modal.editId, p) : await addPayment(p);
             if (ok) {
               setModal(null);
-              showToast("Platba zaznamenána");
+              showToast(modal.editId ? "Platba upravena" : "Platba zaznamenána");
             }
           }}
         />
@@ -1822,20 +1843,28 @@ function ReturnReservationModal({ reservation, item, client, alreadyPaid, onClos
   );
 }
 
-function PaymentModal({ clients, reservation, onClose, onSave }) {
+function PaymentModal({ clients, reservation, initial, clientById, onClose, onSave }) {
+  const isEdit = !!initial;
   const remaining = reservation ? Math.max(0, reservation.price - reservation.alreadyPaid) : 0;
-  const [clientId, setClientId] = useState(reservation?.clientId || clients[0]?.id || "");
-  const [amount, setAmount] = useState(reservation ? String(remaining || reservation.price || "") : "");
-  const [method, setMethod] = useState("Hotově");
-  const [variableSymbol, setVariableSymbol] = useState("");
-  const [note, setNote] = useState("");
+  const [clientId, setClientId] = useState(initial?.clientId || reservation?.clientId || clients[0]?.id || "");
+  const [date, setDate] = useState(initial?.date || todayISO());
+  const [amount, setAmount] = useState(
+    initial ? String(initial.amount) : reservation ? String(remaining || reservation.price || "") : ""
+  );
+  const [method, setMethod] = useState(initial?.method || "Hotově");
+  const [variableSymbol, setVariableSymbol] = useState(initial?.variableSymbol || "");
+  const [note, setNote] = useState(initial?.note || "");
   return (
-    <Modal title="Nová platba" onClose={onClose}>
+    <Modal title={isEdit ? "Upravit platbu" : "Nová platba"} onClose={onClose}>
       {clients.length === 0 ? (
         <div className="empty">Nejprve přidejte klienta.</div>
       ) : (
         <>
-          {reservation ? (
+          {isEdit ? (
+            <div className="card-sub" style={{ marginBottom: 14 }}>
+              Klient: {clientById?.(clientId)?.name || "—"}
+            </div>
+          ) : reservation ? (
             <div className="price-box">
               <div className="price-row">
                 Platba k výpůjčce: <strong>{reservation.item?.name || "—"}</strong> — {reservation.client?.name}
@@ -1852,6 +1881,11 @@ function PaymentModal({ clients, reservation, onClose, onSave }) {
               </select>
             </Field>
           )}
+          {isEdit && (
+            <Field label="Datum">
+              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+            </Field>
+          )}
           <div className="field-row">
             <Field label="Částka (Kč) *">
               <input inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value.replace(/\D/g, ""))} placeholder="300" />
@@ -1864,7 +1898,7 @@ function PaymentModal({ clients, reservation, onClose, onSave }) {
               </select>
             </Field>
           </div>
-          {!reservation && (
+          {(isEdit || !reservation) && (
             <Field label="Variabilní symbol">
               <input inputMode="numeric" value={variableSymbol} onChange={(e) => setVariableSymbol(e.target.value.replace(/\D/g, ""))} placeholder="např. telefon nebo číslo výpůjčky" />
             </Field>
@@ -1880,6 +1914,7 @@ function PaymentModal({ clients, reservation, onClose, onSave }) {
                 onSave({
                   clientId,
                   reservationId: reservation?.id || undefined,
+                  date: isEdit ? date : undefined,
                   amount: Number(amount),
                   method,
                   variableSymbol,
@@ -1887,7 +1922,7 @@ function PaymentModal({ clients, reservation, onClose, onSave }) {
                 })
               }
             >
-              Uložit platbu
+              {isEdit ? "Uložit změny" : "Uložit platbu"}
             </button>
           </div>
         </>
