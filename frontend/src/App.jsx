@@ -1277,9 +1277,24 @@ export function Empty({ text }) {
   return <div className="empty">{text}</div>;
 }
 
+const DUE_SOON_DAYS = 5;
+
 function Dashboard({ stats, items, clients, reservations, paymentDueReservations, onGoto, onApprove, onReject }) {
   const overdueItems = items.filter((i) => i.hasOverdue);
   const pendingReservations = reservations.filter((r) => r.status === "pending");
+  // aktivní výpůjčky s pevným datem vrácení, které se blíží (ale ještě
+  // nejsou po termínu) — doplňuje "Po termínu vrácení" o pohled dopředu
+  const dueSoonItems = items
+    .map((it) => {
+      const res = (it.activeReservations || []).find((r) => {
+        if (!r.endDate) return false;
+        const days = daysBetween(todayISO(), r.endDate);
+        return days >= 0 && days <= DUE_SOON_DAYS;
+      });
+      return res ? { item: it, reservation: res, daysLeft: daysBetween(todayISO(), res.endDate) } : null;
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.daysLeft - b.daysLeft);
   return (
     <div>
       <div className="stat-grid">
@@ -1361,6 +1376,28 @@ function Dashboard({ stats, items, clients, reservations, paymentDueReservations
               </div>
             );
           })}
+        </div>
+      )}
+
+      <div className="section-title">Vrací se brzy</div>
+      {dueSoonItems.length === 0 ? (
+        <Empty text="Nic se v nejbližších dnech nevrací." />
+      ) : (
+        <div className="grid-cards">
+          {dueSoonItems.map(({ item: it, reservation: res, daysLeft }) => (
+            <div className="card" key={it.id}>
+              <div className="card-row">
+                <AlertTriangle size={16} color="#8A6D3B" />
+                <div className="grow">
+                  <div className="card-title">{it.name}</div>
+                  <div className="card-sub">
+                    {clients.find((c) => c.id === res.clientId)?.name} · vrátit{" "}
+                    {daysLeft === 0 ? "dnes" : daysLeft === 1 ? "zítra" : `za ${daysLeft} dní`} ({fmtDate(res.endDate)})
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
