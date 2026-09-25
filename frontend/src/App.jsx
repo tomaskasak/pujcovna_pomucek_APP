@@ -1078,12 +1078,20 @@ export default function App() {
           reservation={(() => {
             const r = modal.reservationId && data.reservations.find((res) => res.id === modal.reservationId);
             if (!r) return null;
+            const item = data.items.find((i) => i.id === r.itemId);
+            // u aktivní výpůjčky bez pevného data vrácení appka v tabulce
+            // ukazuje živě dopočítávaný odhad ceny k dnešnímu dni, ne uloženou
+            // (starou) cenu — platba tu musí počítat se stejným číslem
+            const openEndedActive = r.status === "active" && !r.endDate;
+            const daysSoFar = openEndedActive ? Math.max(1, daysBetween(r.startDate, todayISO()) + 1) : null;
+            const price =
+              openEndedActive && item ? daysSoFar * (r.quantity || 1) * effectiveRate(item, daysSoFar) : r.price;
             return {
               id: r.id,
               clientId: r.clientId,
-              price: r.price,
+              price,
               alreadyPaid: paidByReservation[r.id] || 0,
-              item: data.items.find((i) => i.id === r.itemId),
+              item,
               client: clientById(r.clientId),
             };
           })()}
