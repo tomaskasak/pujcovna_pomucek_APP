@@ -1026,15 +1026,30 @@ export default function App() {
           clients={data.clients}
           items={itemsWithStatus.filter((i) => i.status !== "service")}
           onClose={() => setModal(null)}
-          onSave={async (r) => {
-            const created = await addReservation(r);
-            if (created) {
+          onSave={async (list) => {
+            const results = [];
+            for (const r of list) {
+              results.push(await addReservation(r));
+            }
+            const createdCount = results.filter(Boolean).length;
+            if (createdCount > 0) {
               setModal(null);
-              showToast(
-                created.status === "pending"
-                  ? "Nezávazná rezervace vytvořena — schval ji, až bude pomůcka volná"
-                  : "Výpůjčka vytvořena"
-              );
+              const pendingCount = results.filter((c) => c && c.status === "pending").length;
+              if (createdCount < list.length) {
+                showToast(`Vytvořeno ${createdCount} z ${list.length} výpůjček — zbytek se nepodařilo uložit`);
+              } else if (list.length > 1) {
+                showToast(
+                  pendingCount > 0
+                    ? `Vytvořeno ${createdCount} výpůjček (${pendingCount}× nezávazně — schval, až bude pomůcka volná)`
+                    : `Vytvořeno ${createdCount} výpůjček`
+                );
+              } else {
+                showToast(
+                  pendingCount > 0
+                    ? "Nezávazná rezervace vytvořena — schval ji, až bude pomůcka volná"
+                    : "Výpůjčka vytvořena"
+                );
+              }
             }
           }}
         />
@@ -1541,35 +1556,55 @@ function ItemModal({ onClose, onSave, initial }) {
 function ReservationModal({ clients, items, onClose, onSave }) {
   const rentable = items.filter((i) => !i.serviceFlag);
   const [clientId, setClientId] = useState(clients[0]?.id || "");
-  const [itemId, setItemId] = useState(rentable[0]?.id || "");
-  const [quantity, setQuantity] = useState("1");
   const [startDate, setStartDate] = useState(todayISO());
   const [endDate, setEndDate] = useState(todayISO());
   // klient často předem neví, kdy pomůcku vrátí — pak se datum "Do" nevyplňuje
   // a cena se do ukončení výpůjčky počítá jen jako odhad k dnešnímu dni
   const [openEnded, setOpenEnded] = useState(false);
   const [deposit, setDeposit] = useState("");
-  // null = cena se řídí ceníkem automaticky; jinak ruční přepis (např. domluvená sleva s klientem)
-  const [priceOverride, setPriceOverride] = useState(null);
-  // pomůcka je teď celá půjčená — klient si i tak chce počkat na uvolnění
-  const [nonBindingConfirmed, setNonBindingConfirmed] = useState(false);
 
-  const selectedItem = rentable.find((i) => i.id === itemId);
-  const qtyNum = Math.max(1, Number(quantity) || 1);
+  // "košík" pomůcek pro tuhle výpůjčku — jednomu klientovi na stejný termín
+  // jde přidat víc různých pomůcek najednou, appka z nich při uložení udělá
+  // samostatné výpůjčky (každá se pak vrací/eviduje zvlášť)
+  const [cart, setCart] = useState([]); // [{ itemId, quantity, priceOverride, nonBindingConfirmed }]
+  const pickable = rentable.filter((i) => !cart.some((c) => c.itemId === i.id));
+  const [pickItemId, setPickItemId] = useState(pickable[0]?.id || "");
+  const [pickQuantity, setPickQuantity] = useState("1");
+
+  useEffect(() => {
+    if (!pickable.some((i) => i.id === pickItemId)) setPickItemId(pickable[0]?.id || "");
+  }, [cart]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const days = Math.max(1, daysBetween(startDate, openEnded ? todayISO() : endDate) + 1); // inclusive
-  const rate = selectedItem ? effectiveRate(selectedItem, days) : 0;
-  const computedPrice = selectedItem ? days * qtyNum * rate : 0;
-  const price = priceOverride !== null ? Number(priceOverride) || 0 : computedPrice;
-  const priceFieldValue = priceOverride !== null ? priceOverride : String(computedPrice);
-  const notEnoughNow = selectedItem ? qtyNum > selectedItem.availableQty : false;
+
+  const addToCart = () => {
+    if (!pickItemId) return;
+    setCart((c) => [
+      ...c,
+      { itemId: pickItemId, quantity: Math.max(1, Number(pickQuantity) || 1), priceOverride: null, nonBindingConfirmed: false },
+    ]);
+    setPickQuantity("1");
+  };
+  const removeFromCart = (itemId) => setCart((c) => c.filter((x) => x.itemId !== itemId));
+  const updateCartEntry = (itemId, patch) => setCart((c) => c.map((x) => (x.itemId === itemId ? { ...x, ...patch } : x)));
+
+  const cartLines = cart.map((entry) => {
+    const item = rentable.find((i) => i.id === entry.itemId);
+    const rate = item ? effectiveRate(item, days) : 0;
+    const computedPrice = item ? days * entry.quantity * rate : 0;
+    const price = entry.priceOverride !== null ? Number(entry.priceOverride) || 0 : computedPrice;
+    const notEnoughNow = item ? entry.quantity > item.availableQty : false;
+    const overQuantity = item ? entry.quantity > item.quantityTotal : false;
+    return { entry, item, rate, computedPrice, price, notEnoughNow, overQuantity };
+  });
+  const totalPrice = cartLines.reduce((s, l) => s + l.price, 0);
 
   const canSave =
     clientId &&
-    itemId &&
+    cart.length > 0 &&
     startDate &&
     (openEnded || (endDate && endDate >= startDate)) &&
-    qtyNum <= (selectedItem?.quantityTotal || 0) &&
-    (!notEnoughNow || nonBindingConfirmed);
+    cartLines.every((l) => l.item && !l.overQuantity && (!l.notEnoughNow || l.entry.nonBindingConfirmed));
 
   return (
     <Modal title="Nová výpůjčka" onClose={onClose}>
@@ -1584,30 +1619,6 @@ function ReservationModal({ clients, items, onClose, onSave }) {
               {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </Field>
-          <div className="field-row">
-            <Field label="Pomůcka *">
-              <select
-                value={itemId}
-                onChange={(e) => {
-                  setItemId(e.target.value);
-                  setNonBindingConfirmed(false);
-                }}
-              >
-                {rentable.map((i) => (
-                  <option key={i.id} value={i.id}>
-                    {i.name} {i.availableQty > 0 ? `(volno ${i.availableQty})` : "(momentálně půjčeno)"}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Počet kusů">
-              <input
-                inputMode="numeric"
-                value={quantity}
-                onChange={(e) => setQuantity(e.target.value.replace(/\D/g, ""))}
-              />
-            </Field>
-          </div>
           <div className="field-row">
             <Field label="Od *">
               <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
@@ -1630,48 +1641,87 @@ function ReservationModal({ clients, items, onClose, onSave }) {
             <input inputMode="numeric" value={deposit} onChange={(e) => setDeposit(e.target.value.replace(/\D/g, ""))} placeholder="500" />
           </Field>
 
-          {selectedItem && (
-            <div className="price-box">
-              {openEnded && (
-                <div className="price-row tier-applied">
-                  odhad k dnešnímu dni — appka bude počítat dál, dokud výpůjčku neukončíš
-                </div>
-              )}
-              <div className="price-row">{days} {days === 1 ? "den" : days < 5 ? "dny" : "dní"} × {qtyNum} ks × {czk(rate)}/den (dle ceníku)</div>
-              {selectedItem.priceTiers && selectedItem.priceTiers.length > 1 && (
-                <div className="price-row tier-applied">použita sazba pro {days}+ dní ({czk(rate)}/den)</div>
-              )}
-              <Field label="Cena k fakturaci (Kč)">
-                <input
-                  inputMode="numeric"
-                  className="mono"
-                  value={priceFieldValue}
-                  onChange={(e) => setPriceOverride(e.target.value.replace(/\D/g, ""))}
-                />
-              </Field>
-              {priceOverride !== null && Number(priceOverride) !== computedPrice && (
-                <button className="link-btn" onClick={() => setPriceOverride(null)}>
-                  Použít cenu dle ceníku ({czk(computedPrice)})
-                </button>
-              )}
-              {notEnoughNow && qtyNum <= selectedItem.quantityTotal && (
-                <>
-                  <div className="price-warn">
-                    Momentálně k dispozici jen {selectedItem.availableQty} ks (celkem appka eviduje{" "}
-                    {selectedItem.quantityTotal} ks) — pomůcka je teď půjčená.
+          <div className="cart-add-row">
+            <Field label="Přidat pomůcku">
+              <select value={pickItemId} onChange={(e) => setPickItemId(e.target.value)} disabled={pickable.length === 0}>
+                {pickable.length === 0 && <option>Vše už v košíku</option>}
+                {pickable.map((i) => (
+                  <option key={i.id} value={i.id}>
+                    {i.name} {i.availableQty > 0 ? `(volno ${i.availableQty})` : "(momentálně půjčeno)"}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Ks">
+              <input inputMode="numeric" value={pickQuantity} onChange={(e) => setPickQuantity(e.target.value.replace(/\D/g, ""))} />
+            </Field>
+            <button type="button" className="btn btn-ghost" disabled={!pickItemId} onClick={addToCart}>
+              <Plus size={16} /> Přidat
+            </button>
+          </div>
+
+          {cartLines.length === 0 ? (
+            <Empty text="Zatím žádná pomůcka v košíku — přidej aspoň jednu." />
+          ) : (
+            <div className="cart-list">
+              {cartLines.map(({ entry, item, rate, computedPrice, price, notEnoughNow, overQuantity }) => (
+                <div className="cart-item" key={entry.itemId}>
+                  <div className="cart-item-head">
+                    <div className="grow">
+                      <strong>{item.name}</strong> × {entry.quantity}
+                      {item.priceTiers && item.priceTiers.length > 1 && (
+                        <span className="tier-hint"> · sazba pro {days}+ dní: {czk(rate)}/den</span>
+                      )}
+                    </div>
+                    <button type="button" className="icon-btn danger" onClick={() => removeFromCart(entry.itemId)}>
+                      <X size={14} />
+                    </button>
                   </div>
-                  <label className="checkbox-row checkbox-row-loose">
-                    <input
-                      type="checkbox"
-                      checked={nonBindingConfirmed}
-                      onChange={(e) => setNonBindingConfirmed(e.target.checked)}
-                    />
-                    Přesto vytvořit jako nezávaznou rezervaci — schválíš ji, až se pomůcka uvolní
-                  </label>
-                </>
-              )}
-              {notEnoughNow && qtyNum > selectedItem.quantityTotal && (
-                <div className="price-warn">Appka eviduje jen {selectedItem.quantityTotal} ks celkem.</div>
+                  <div className="field-row">
+                    <Field label="Počet kusů">
+                      <input
+                        inputMode="numeric"
+                        value={entry.quantity}
+                        onChange={(e) =>
+                          updateCartEntry(entry.itemId, { quantity: Math.max(1, Number(e.target.value.replace(/\D/g, "")) || 1) })
+                        }
+                      />
+                    </Field>
+                    <Field label="Cena k fakturaci (Kč)">
+                      <input
+                        inputMode="numeric"
+                        className="mono"
+                        value={entry.priceOverride !== null ? entry.priceOverride : String(computedPrice)}
+                        onChange={(e) => updateCartEntry(entry.itemId, { priceOverride: e.target.value.replace(/\D/g, "") })}
+                      />
+                    </Field>
+                  </div>
+                  {entry.priceOverride !== null && Number(entry.priceOverride) !== computedPrice && (
+                    <button type="button" className="link-btn" onClick={() => updateCartEntry(entry.itemId, { priceOverride: null })}>
+                      Použít cenu dle ceníku ({czk(computedPrice)})
+                    </button>
+                  )}
+                  {overQuantity && <div className="price-warn">Appka eviduje jen {item.quantityTotal} ks celkem.</div>}
+                  {notEnoughNow && !overQuantity && (
+                    <>
+                      <div className="price-warn">
+                        Momentálně k dispozici jen {item.availableQty} ks (celkem appka eviduje {item.quantityTotal} ks) —
+                        pomůcka je teď půjčená.
+                      </div>
+                      <label className="checkbox-row checkbox-row-loose">
+                        <input
+                          type="checkbox"
+                          checked={entry.nonBindingConfirmed}
+                          onChange={(e) => updateCartEntry(entry.itemId, { nonBindingConfirmed: e.target.checked })}
+                        />
+                        Přesto vytvořit jako nezávaznou rezervaci — schválíš ji, až se pomůcka uvolní
+                      </label>
+                    </>
+                  )}
+                </div>
+              ))}
+              {cartLines.length > 1 && !openEnded && (
+                <div className="cart-total">Celkem za {cartLines.length} pomůcky: {czk(totalPrice)}</div>
               )}
             </div>
           )}
@@ -1681,19 +1731,21 @@ function ReservationModal({ clients, items, onClose, onSave }) {
               className="btn btn-primary"
               disabled={!canSave}
               onClick={() =>
-                onSave({
-                  clientId,
-                  itemId,
-                  quantity: qtyNum,
-                  startDate,
-                  endDate: openEnded ? null : endDate,
-                  deposit: Number(deposit) || 0,
-                  price,
-                  nonBinding: notEnoughNow,
-                })
+                onSave(
+                  cartLines.map((l) => ({
+                    clientId,
+                    itemId: l.entry.itemId,
+                    quantity: l.entry.quantity,
+                    startDate,
+                    endDate: openEnded ? null : endDate,
+                    deposit: Number(deposit) || 0,
+                    price: l.price,
+                    nonBinding: l.notEnoughNow,
+                  }))
+                )
               }
             >
-              {notEnoughNow ? "Vytvořit nezávaznou rezervaci" : "Vytvořit výpůjčku"}
+              {cartLines.length > 1 ? `Vytvořit výpůjčky (${cartLines.length})` : "Vytvořit výpůjčku"}
             </button>
           </div>
         </>
@@ -2159,6 +2211,16 @@ export function Style() {
       }
       .checkbox-row input { margin:0; }
       .checkbox-row.checkbox-row-loose { margin-top: 12px; }
+
+      .cart-add-row { display:flex; gap:8px; align-items:flex-end; margin-bottom:12px; }
+      .cart-add-row .field { flex:1; margin-bottom:0; }
+      .cart-add-row .field:first-child { flex:2; }
+      .cart-add-row .btn { flex-shrink:0; }
+      .cart-list { display:flex; flex-direction:column; gap:10px; margin-bottom:14px; }
+      .cart-item { background:#F7F2E4; border:1px solid #E8E0C8; border-radius:10px; padding:10px 12px; }
+      .cart-item .field { margin-bottom:0; }
+      .cart-item-head { display:flex; align-items:flex-start; gap:8px; margin-bottom:8px; font-size:13.5px; }
+      .cart-total { text-align:right; font-family: Georgia, 'Times New Roman', serif; font-size:16px; font-weight:600; padding:6px 2px 2px; }
 
       .tiers-box { background:#F7F2E4; border:1px solid #E8E0C8; border-radius:10px; padding:10px 12px; margin-bottom:14px; }
 
