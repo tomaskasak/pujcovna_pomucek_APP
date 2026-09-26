@@ -1,0 +1,15 @@
+name: temp-check-deploy
+on: push
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          for i in 1 2 3 4 5 6; do
+            JS=$(curl -s --max-time 60 https://pujcovna-backend.onrender.com/ | grep -o 'assets/index-[^"]*\.js' | head -1)
+            echo "bundle: $JS"
+            if [ -n "$JS" ]; then
+              curl -s --max-time 60 "https://pujcovna-backend.onrender.com/$JS" | grep -o 'Přidat pomůcku\|cart-add-row\|Vrací se brzy' | sort | uniq -c
+            fi
+            sleep 60
+          done
