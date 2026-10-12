@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
-import { Users, PackageSearch, CalendarClock, Wallet, Plus, X, Check, AlertTriangle, Search, Trash2, Globe, LogOut, Pencil, RotateCcw, ExternalLink, Copy, MessageSquare, Camera } from "lucide-react";
+import { Users, PackageSearch, CalendarClock, Wallet, Plus, X, Check, AlertTriangle, Search, Trash2, Globe, LogOut, Pencil, RotateCcw, ExternalLink, Copy, MessageSquare, Camera, Archive, History } from "lucide-react";
 import { api, onUnauthorized } from "./api.js";
 
 const STATUS = {
@@ -120,6 +120,7 @@ export default function App() {
   const [loadError, setLoadError] = useState(null);
   const [tab, setTab] = useState("dashboard");
   const [query, setQuery] = useState("");
+  const [resView, setResView] = useState("current"); // "current" | "archive"
   const [modal, setModal] = useState(null); // {type, id?}
   const [toast, setToast] = useState(null);
 
@@ -488,13 +489,34 @@ export default function App() {
   const q = query.trim().toLowerCase();
   const filteredClients = data.clients.filter((c) => !q || c.name.toLowerCase().includes(q) || (c.phone || "").includes(q));
   const filteredItems = itemsWithStatus.filter((i) => !q || i.name.toLowerCase().includes(q) || (i.category || "").toLowerCase().includes(q));
-  // nevyřízené žádosti (pending) vždy nahoře, jinak od nejnovějšího data
-  const sortedReservations = [...data.reservations].sort((a, b) => {
-    const pendingA = a.status === "pending" ? 0 : 1;
-    const pendingB = b.status === "pending" ? 0 : 1;
-    if (pendingA !== pendingB) return pendingA - pendingB;
-    return (b.startDate || "").localeCompare(a.startDate || "");
-  });
+  const isArchived = (r) => r.status === "returned" || r.status === "rejected";
+  const archivedCount = data.reservations.filter(isArchived).length;
+  const currentCount = data.reservations.length - archivedCount;
+  const qDigits = q.replace(/\s/g, "");
+  const reservationMatches = (r) => {
+    if (!q) return true;
+    const client = data.clients.find((c) => c.id === r.clientId);
+    const item = data.items.find((i) => i.id === r.itemId);
+    return (
+      (client?.name || "").toLowerCase().includes(q) ||
+      (qDigits && (client?.phone || "").replace(/\s/g, "").includes(qDigits)) ||
+      (client?.address || "").toLowerCase().includes(q) ||
+      (item?.name || "").toLowerCase().includes(q)
+    );
+  };
+  const sortedReservations = data.reservations
+    .filter((r) => (resView === "archive" ? isArchived(r) : !isArchived(r)))
+    .filter(reservationMatches)
+    .sort((a, b) => {
+      if (resView === "archive") {
+        return (b.returnedAt || b.startDate || "").localeCompare(a.returnedAt || a.startDate || "");
+      }
+      // nevyřízené žádosti (pending) vždy nahoře, jinak od nejnovějšího data
+      const pendingA = a.status === "pending" ? 0 : 1;
+      const pendingB = b.status === "pending" ? 0 : 1;
+      if (pendingA !== pendingB) return pendingA - pendingB;
+      return (b.startDate || "").localeCompare(a.startDate || "");
+    });
 
   if (authState === "checking") {
     return (
@@ -652,17 +674,37 @@ export default function App() {
               {filteredClients.length === 0 && <Empty text="Zatím žádní klienti. Přidejte prvního." />}
               {filteredClients.map((c) => {
                 const active = data.reservations.filter((r) => r.clientId === c.id && r.status === "active").length;
+                const past = data.reservations.filter((r) => r.clientId === c.id && r.status === "returned").length;
                 return (
                   <div className="card" key={c.id}>
                     <div className="card-row">
                       <div className="avatar">{initials(c.name)}</div>
                       <div className="grow">
                         <div className="card-title">{c.name}</div>
-                        <div className="card-sub mono">{c.phone || "bez telefonu"}</div>
+                        <div className="card-sub mono">
+                          {c.phone ? (
+                            <a className="tel-link" href={`tel:${c.phone.replace(/\s/g, "")}`}>{c.phone}</a>
+                          ) : (
+                            "bez telefonu"
+                          )}
+                        </div>
                       </div>
                     </div>
                     {c.address && <div className="card-line">{c.address}</div>}
                     {c.note && <div className="card-note">{c.note}</div>}
+                    {past > 0 && (
+                      <button
+                        className="link-btn"
+                        style={{ marginTop: 8 }}
+                        onClick={() => {
+                          setResView("archive");
+                          setQuery(c.name);
+                          setTab("reservations");
+                        }}
+                      >
+                        <History size={14} /> Historie ({past} ukončen{past === 1 ? "á" : past < 5 ? "é" : "ých"})
+                      </button>
+                    )}
                     <div className="card-foot-actions">
                       <span className="card-foot">{active > 0 ? `${active} aktivní výpůjčka/y` : "žádná aktivní výpůjčka"}</span>
                       <span style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -771,8 +813,32 @@ export default function App() {
           )}
 
           {tab === "reservations" && (
+            <>
+            <div className="segment">
+              <button className={resView === "current" ? "active" : ""} onClick={() => setResView("current")}>
+                Aktuální ({currentCount})
+              </button>
+              <button className={resView === "archive" ? "active" : ""} onClick={() => setResView("archive")}>
+                <Archive size={14} /> Archiv ({archivedCount})
+              </button>
+            </div>
+            {resView === "archive" && (
+              <div className="segment-hint">
+                Ukončené a zamítnuté výpůjčky. Klienta najdeš přes „Hledat…" nahoře (jméno, telefon, adresa, pomůcka).
+              </div>
+            )}
             <div className="table-wrap">
-              {sortedReservations.length === 0 && <Empty text="Zatím žádné výpůjčky." />}
+              {sortedReservations.length === 0 && (
+                <Empty
+                  text={
+                    q
+                      ? "Nic neodpovídá hledání."
+                      : resView === "archive"
+                        ? "Archiv je zatím prázdný."
+                        : "Žádné aktuální výpůjčky."
+                  }
+                />
+              )}
               {sortedReservations.length > 0 && (
                 <table className="table">
                   <thead>
@@ -802,7 +868,14 @@ export default function App() {
                         <tr key={r.id}>
                           <td>
                             {client?.name || "—"}
-                            {client?.phone && <div className="table-subtext mono">{client.phone}</div>}
+                            {client?.phone && (
+                              <div className="table-subtext mono">
+                                <a className="tel-link" href={`tel:${client.phone.replace(/\s/g, "")}`}>{client.phone}</a>
+                              </div>
+                            )}
+                            {resView === "archive" && client?.address && (
+                              <div className="table-subtext">{client.address}</div>
+                            )}
                           </td>
                           <td>{item?.name || "—"}{r.quantity > 1 ? ` ×${r.quantity}` : ""}</td>
                           <td className="mono">{fmtDate(r.startDate)}</td>
@@ -924,6 +997,7 @@ export default function App() {
                 </table>
               )}
             </div>
+            </>
           )}
 
           {tab === "payments" && (
@@ -2143,6 +2217,15 @@ export function Style() {
       .link-btn-danger { color:#B5482F; }
       .row-actions { display:flex; align-items:center; gap:10px; white-space:nowrap; }
       .table-subtext { font-size:11px; color:#8C8470; margin-top:2px; }
+      .tel-link { color:inherit; text-decoration:underline; text-decoration-color:#C9BE9C; }
+
+      .segment { display:inline-flex; background:#F1ECD8; border:1px solid #E8E0C8; border-radius:10px; padding:3px; margin-bottom:12px; }
+      .segment button {
+        display:inline-flex; align-items:center; gap:6px; border:none; background:none; padding:7px 14px; border-radius:8px;
+        font-size:13px; font-family:inherit; color:#6B6555; cursor:pointer;
+      }
+      .segment button.active { background:#fff; color:#2F5D3F; font-weight:600; box-shadow:0 1px 2px rgba(32,40,31,0.12); }
+      .segment-hint { font-size:12px; color:#8C8470; margin:-4px 0 12px; }
       .paid-subtext { color:#3F8D5E; font-weight:600; }
       .payment-due-subtext { color:#8A6D3B; font-weight:600; }
 
