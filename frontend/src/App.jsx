@@ -470,7 +470,9 @@ export default function App() {
         ...d,
         sales: [res.sale, ...d.sales],
         // PUT/POST na server nevrací photoIds — ponechat ty, které už appka zná
-        items: d.items.map((i) => (i.id === res.item.id ? { ...res.item, photoIds: i.photoIds } : i)),
+        items: res.item
+          ? d.items.map((i) => (i.id === res.item.id ? { ...res.item, photoIds: i.photoIds } : i))
+          : d.items,
         reservations: res.reservation
           ? d.reservations.map((r) => (r.id === res.reservation.id ? res.reservation : r))
           : d.reservations,
@@ -670,9 +672,14 @@ export default function App() {
                   </button>
                 </>
               )}
-              {tab === "reservations" && (
+              {tab === "reservations" && resView !== "sales" && (
                 <button className="btn btn-primary" onClick={() => setModal({ type: "reservation" })}>
                   <Plus size={16} /> Výpůjčka
+                </button>
+              )}
+              {tab === "reservations" && resView === "sales" && (
+                <button className="btn btn-primary" onClick={() => setModal({ type: "sale" })}>
+                  <Plus size={16} /> Prodej
                 </button>
               )}
               {tab === "payments" && (
@@ -894,7 +901,11 @@ export default function App() {
               <div className="table-wrap">
                 {filteredSales.length === 0 && (
                   <Empty
-                    text={q ? "Nic neodpovídá hledání." : "Zatím žádný prodej. Prodat jde z karty pomůcky nebo u aktivní výpůjčky."}
+                    text={
+                      q
+                        ? "Nic neodpovídá hledání."
+                        : "Zatím žádný prodej. Přidej ho tlačítkem „+ Prodej\" nahoře, z karty pomůcky nebo u aktivní výpůjčky."
+                    }
                   />
                 )}
                 {filteredSales.length > 0 && (
@@ -1316,7 +1327,8 @@ export default function App() {
       {modal?.type === "sale" && (
         <SaleModal
           clients={data.clients}
-          item={itemById(modal.itemId)}
+          item={modal.itemId ? itemById(modal.itemId) : null}
+          items={itemsWithStatus.filter((i) => !i.serviceFlag && i.availableQty > 0)}
           reservation={modal.reservationId ? data.reservations.find((r) => r.id === modal.reservationId) : null}
           clientById={clientById}
           onClose={() => setModal(null)}
@@ -2196,8 +2208,13 @@ function ReturnReservationModal({ reservation, item, client, alreadyPaid, onClos
   );
 }
 
-function SaleModal({ clients, item, reservation, clientById, onClose, onSave }) {
+function SaleModal({ clients, item: fixedItem, items = [], reservation, clientById, onClose, onSave }) {
   const fromRental = !!reservation;
+  // bez předvybrané pomůcky: buď kus z půjčovny, nebo ručně zapsané jiné zboží ("")
+  const [pickId, setPickId] = useState("");
+  const [manualName, setManualName] = useState("");
+  const item = fixedItem || items.find((i) => i.id === pickId) || null;
+  const manual = !item;
   const [clientId, setClientId] = useState(reservation?.clientId || clients[0]?.id || "");
   const [quantity, setQuantity] = useState(String(reservation?.quantity || 1));
   const [price, setPrice] = useState("");
@@ -2214,14 +2231,37 @@ function SaleModal({ clients, item, reservation, clientById, onClose, onSave }) 
   const [rentalPrice, setRentalPrice] = useState(null);
   const rentalFinal = rentalPrice !== null ? Number(rentalPrice) || 0 : rentalComputed;
 
-  if (!item) return null;
   const qty = Math.max(1, Number(quantity) || 1);
   // u prodeje z výpůjčky se půjčený kus nejdřív "vrátí", takže je k dispozici i on
-  const maxQty = item.availableQty + (fromRental ? reservation.quantity || 1 : 0);
-  const canSave = clientId && price !== "" && qty <= maxQty && (!fromRental || date >= reservation.startDate);
+  const maxQty = manual ? Infinity : item.availableQty + (fromRental ? reservation.quantity || 1 : 0);
+  const canSave =
+    clientId &&
+    price !== "" &&
+    qty <= maxQty &&
+    (!manual || manualName.trim()) &&
+    (!fromRental || date >= reservation.startDate);
 
   return (
-    <Modal title={`Prodat: ${item.name}`} onClose={onClose}>
+    <Modal title={fixedItem ? `Prodat: ${fixedItem.name}` : "Nový prodej"} onClose={onClose}>
+      {!fixedItem && (
+        <>
+          <Field label="Co klient kupuje *">
+            <select value={pickId} onChange={(e) => setPickId(e.target.value)}>
+              <option value="">Jiné zboží (napsat ručně)</option>
+              {items.map((i) => (
+                <option key={i.id} value={i.id}>
+                  {i.name} — z půjčovny (volno {i.availableQty})
+                </option>
+              ))}
+            </select>
+          </Field>
+          {manual && (
+            <Field label="Název zboží *">
+              <input value={manualName} onChange={(e) => setManualName(e.target.value)} placeholder="např. návleky na berle" autoFocus />
+            </Field>
+          )}
+        </>
+      )}
       {fromRental ? (
         <div className="price-box">
           <div className="price-row">
@@ -2281,7 +2321,9 @@ function SaleModal({ clients, item, reservation, clientById, onClose, onSave }) 
         </Field>
       )}
       <div className="card-sub" style={{ marginBottom: 12 }}>
-        Prodaný kus ubude ze skladu půjčovny ({item.quantityTotal} → {Math.max(0, item.quantityTotal - qty)} ks).
+        {manual
+          ? "Zboží mimo půjčovnu — sklad pomůcek se nemění."
+          : `Prodaný kus ubude ze skladu půjčovny (${item.quantityTotal} → ${Math.max(0, item.quantityTotal - qty)} ks).`}
       </div>
 
       <div className="modal-actions">
@@ -2291,7 +2333,8 @@ function SaleModal({ clients, item, reservation, clientById, onClose, onSave }) 
           onClick={() =>
             onSave({
               clientId,
-              itemId: item.id,
+              itemId: item ? item.id : undefined,
+              itemName: manual ? manualName.trim() : undefined,
               quantity: qty,
               price: Number(price) || 0,
               date,
