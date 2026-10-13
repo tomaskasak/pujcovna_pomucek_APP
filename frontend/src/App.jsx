@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
-import { Users, PackageSearch, CalendarClock, Wallet, Plus, X, Check, AlertTriangle, Search, Trash2, Globe, LogOut, Pencil, RotateCcw, ExternalLink, Copy, MessageSquare, Camera, Archive, History } from "lucide-react";
+import { Users, PackageSearch, CalendarClock, Wallet, Plus, X, Check, AlertTriangle, Search, Trash2, Globe, LogOut, Pencil, RotateCcw, ExternalLink, Copy, MessageSquare, Camera, Archive, History, ShoppingBag } from "lucide-react";
 import { api, onUnauthorized } from "./api.js";
 
 const STATUS = {
@@ -64,7 +64,7 @@ function resizeImageFile(file, maxDim = 1200, quality = 0.82) {
   });
 }
 
-const emptyData = () => ({ clients: [], items: [], reservations: [], payments: [], services: [] });
+const emptyData = () => ({ clients: [], items: [], reservations: [], payments: [], services: [], sales: [] });
 
 // Adresa veřejné stránky (bez přihlášení) ke sdílení s klienty, např. do SMS.
 const PUBLIC_URL = "https://pujcovna.reharentkrkonose.cz/verejny-prehled";
@@ -225,6 +225,14 @@ export default function App() {
       }
     });
     return { paidByReservation: sums, lastPaymentDateByReservation: lastDates };
+  }, [data.payments]);
+
+  const paidBySale = useMemo(() => {
+    const sums = {};
+    data.payments.forEach((p) => {
+      if (p.saleId) sums[p.saleId] = (sums[p.saleId] || 0) + Number(p.amount || 0);
+    });
+    return sums;
   }, [data.payments]);
 
   // dlouhodobé (typicky měsíční) výpůjčky, u kterých už 30+ dní neproběhla
@@ -455,6 +463,43 @@ export default function App() {
       return false;
     }
   };
+  const addSale = async (s) => {
+    try {
+      const res = await api.createSale(s);
+      setData((d) => ({
+        ...d,
+        sales: [res.sale, ...d.sales],
+        // PUT/POST na server nevrací photoIds — ponechat ty, které už appka zná
+        items: d.items.map((i) => (i.id === res.item.id ? { ...res.item, photoIds: i.photoIds } : i)),
+        reservations: res.reservation
+          ? d.reservations.map((r) => (r.id === res.reservation.id ? res.reservation : r))
+          : d.reservations,
+        payments: res.payment ? [...d.payments, res.payment] : d.payments,
+      }));
+      return true;
+    } catch (e) {
+      showToast(e.message);
+      return false;
+    }
+  };
+  const removeSale = async (id) => {
+    if (!window.confirm("Smazat tento prodej? Prodané kusy se vrátí do skladu a smažou se i platby k němu.")) return;
+    try {
+      const res = await api.deleteSale(id);
+      setData((d) => ({
+        ...d,
+        sales: d.sales.filter((s) => s.id !== id),
+        payments: d.payments.filter((p) => p.saleId !== id),
+        items: res.item
+          ? d.items.map((i) => (i.id === res.item.id ? { ...res.item, photoIds: i.photoIds } : i))
+          : d.items,
+      }));
+      showToast("Prodej smazán");
+    } catch (e) {
+      showToast(e.message);
+    }
+  };
+
   const removePayment = async (id) => {
     try {
       await api.deletePayment(id);
@@ -504,6 +549,16 @@ export default function App() {
       (item?.name || "").toLowerCase().includes(q)
     );
   };
+  const filteredSales = data.sales.filter((s) => {
+    if (!q) return true;
+    const client = data.clients.find((c) => c.id === s.clientId);
+    return (
+      (client?.name || "").toLowerCase().includes(q) ||
+      (qDigits && (client?.phone || "").replace(/\s/g, "").includes(qDigits)) ||
+      (client?.address || "").toLowerCase().includes(q) ||
+      (s.itemName || "").toLowerCase().includes(q)
+    );
+  });
   const sortedReservations = data.reservations
     .filter((r) => (resView === "archive" ? isArchived(r) : !isArchived(r)))
     .filter(reservationMatches)
@@ -803,6 +858,11 @@ export default function App() {
                     <button className="link-btn" onClick={() => setItemService(it.id, !it.serviceFlag)}>
                       {it.serviceFlag ? "Vrátit do nabídky" : "K servisu"}
                     </button>
+                    {!it.serviceFlag && it.availableQty > 0 && (
+                      <button className="link-btn" onClick={() => setModal({ type: "sale", itemId: it.id })}>
+                        <ShoppingBag size={14} /> Prodat
+                      </button>
+                    )}
                     <button className="icon-btn danger" onClick={() => removeItem(it.id)}>
                       <Trash2 size={16} />
                     </button>
@@ -821,12 +881,91 @@ export default function App() {
               <button className={resView === "archive" ? "active" : ""} onClick={() => setResView("archive")}>
                 <Archive size={14} /> Archiv ({archivedCount})
               </button>
+              <button className={resView === "sales" ? "active" : ""} onClick={() => setResView("sales")}>
+                <ShoppingBag size={14} /> Prodeje ({data.sales.length})
+              </button>
             </div>
             {resView === "archive" && (
               <div className="segment-hint">
                 Ukončené a zamítnuté výpůjčky. Klienta najdeš přes „Hledat…" nahoře (jméno, telefon, adresa, pomůcka).
               </div>
             )}
+            {resView === "sales" && (
+              <div className="table-wrap">
+                {filteredSales.length === 0 && (
+                  <Empty
+                    text={q ? "Nic neodpovídá hledání." : "Zatím žádný prodej. Prodat jde z karty pomůcky nebo u aktivní výpůjčky."}
+                  />
+                )}
+                {filteredSales.length > 0 && (
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th>Datum</th>
+                        <th>Klient</th>
+                        <th>Pomůcka</th>
+                        <th>Cena</th>
+                        <th>Zaplaceno</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredSales.map((s) => {
+                        const client = clientById(s.clientId);
+                        const paid = paidBySale[s.id] || 0;
+                        const remaining = s.price - paid;
+                        return (
+                          <tr key={s.id}>
+                            <td className="mono">{fmtDate(s.date)}</td>
+                            <td>
+                              {client?.name || "—"}
+                              {client?.phone && (
+                                <div className="table-subtext mono">
+                                  <a className="tel-link" href={`tel:${client.phone.replace(/\s/g, "")}`}>{client.phone}</a>
+                                </div>
+                              )}
+                            </td>
+                            <td>
+                              {s.itemName}
+                              {s.quantity > 1 ? ` ×${s.quantity}` : ""}
+                              {s.reservationId && <div className="table-subtext">po výpůjčce</div>}
+                              {s.note && <div className="table-subtext">{s.note}</div>}
+                            </td>
+                            <td className="mono">{czk(s.price)}</td>
+                            <td>
+                              {remaining <= 0 ? (
+                                <span className="pay-select pay-pill pay-zaplaceno">Zaplaceno</span>
+                              ) : paid > 0 ? (
+                                <span className="pay-select pay-pill pay-zaloha">zbývá {czk(remaining)}</span>
+                              ) : (
+                                <span className="pay-select pay-pill pay-nezaplaceno">Nezaplaceno</span>
+                              )}
+                            </td>
+                            <td>
+                              <div className="row-actions">
+                                {remaining > 0 && (
+                                  <button
+                                    className="link-btn"
+                                    onClick={() => setModal({ type: "payment", saleId: s.id })}
+                                    title="Zaznamenat platbu za prodej"
+                                  >
+                                    <Wallet size={14} /> Platba
+                                  </button>
+                                )}
+                                <button className="icon-btn danger" onClick={() => removeSale(s.id)} title="Smazat prodej">
+                                  <Trash2 size={14} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            )}
+            {resView !== "sales" && (
             <div className="table-wrap">
               {sortedReservations.length === 0 && (
                 <Empty
@@ -952,6 +1091,15 @@ export default function App() {
                                   <Check size={14} /> Vrátit
                                 </button>
                               )}
+                              {r.status === "active" && item && (
+                                <button
+                                  className="link-btn"
+                                  onClick={() => setModal({ type: "sale", itemId: r.itemId, reservationId: r.id })}
+                                  title="Klient si pomůcku koupí — výpůjčka se tím ukončí"
+                                >
+                                  <ShoppingBag size={14} /> Prodat
+                                </button>
+                              )}
                               {r.status === "pending" && (
                                 <>
                                   <button className="link-btn" onClick={() => approveReservation(r.id)}>
@@ -997,6 +1145,7 @@ export default function App() {
                 </table>
               )}
             </div>
+            )}
             </>
           )}
 
@@ -1027,6 +1176,11 @@ export default function App() {
                             {p.reservationId && (
                               <div className="table-subtext">
                                 {itemById(data.reservations.find((r) => r.id === p.reservationId)?.itemId)?.name || "výpůjčka"}
+                              </div>
+                            )}
+                            {p.saleId && (
+                              <div className="table-subtext">
+                                prodej: {data.sales.find((s) => s.id === p.saleId)?.itemName || "—"}
                               </div>
                             )}
                           </td>
@@ -1159,12 +1313,40 @@ export default function App() {
           }}
         />
       )}
+      {modal?.type === "sale" && (
+        <SaleModal
+          clients={data.clients}
+          item={itemById(modal.itemId)}
+          reservation={modal.reservationId ? data.reservations.find((r) => r.id === modal.reservationId) : null}
+          clientById={clientById}
+          onClose={() => setModal(null)}
+          onSave={async (s) => {
+            const ok = await addSale(s);
+            if (ok) {
+              setModal(null);
+              showToast(s.reservationId ? "Prodáno — výpůjčka ukončena" : "Prodej zapsán");
+            }
+          }}
+        />
+      )}
       {modal?.type === "payment" && (
         <PaymentModal
           clients={data.clients}
           clientById={clientById}
           initial={modal.editId ? data.payments.find((p) => p.id === modal.editId) : null}
           reservation={(() => {
+            const sale = modal.saleId && data.sales.find((s) => s.id === modal.saleId);
+            if (sale) {
+              return {
+                kind: "sale",
+                id: sale.id,
+                clientId: sale.clientId,
+                price: sale.price,
+                alreadyPaid: paidBySale[sale.id] || 0,
+                item: { name: sale.itemName },
+                client: clientById(sale.clientId),
+              };
+            }
             const r = modal.reservationId && data.reservations.find((res) => res.id === modal.reservationId);
             if (!r) return null;
             const item = data.items.find((i) => i.id === r.itemId);
@@ -2014,6 +2196,120 @@ function ReturnReservationModal({ reservation, item, client, alreadyPaid, onClos
   );
 }
 
+function SaleModal({ clients, item, reservation, clientById, onClose, onSave }) {
+  const fromRental = !!reservation;
+  const [clientId, setClientId] = useState(reservation?.clientId || clients[0]?.id || "");
+  const [quantity, setQuantity] = useState(String(reservation?.quantity || 1));
+  const [price, setPrice] = useState("");
+  const [date, setDate] = useState(todayISO());
+  const [note, setNote] = useState("");
+  const [paidNow, setPaidNow] = useState(true);
+  const [method, setMethod] = useState("Hotově");
+
+  // výpůjčka bez pevného data vrácení: nájem se uzavře ke dni prodeje
+  const openEnded = fromRental && !reservation.endDate;
+  const rentalDays = openEnded ? Math.max(1, daysBetween(reservation.startDate, date) + 1) : 0;
+  const rentalComputed =
+    openEnded && item ? rentalDays * (reservation.quantity || 1) * effectiveRate(item, rentalDays) : 0;
+  const [rentalPrice, setRentalPrice] = useState(null);
+  const rentalFinal = rentalPrice !== null ? Number(rentalPrice) || 0 : rentalComputed;
+
+  if (!item) return null;
+  const qty = Math.max(1, Number(quantity) || 1);
+  // u prodeje z výpůjčky se půjčený kus nejdřív "vrátí", takže je k dispozici i on
+  const maxQty = item.availableQty + (fromRental ? reservation.quantity || 1 : 0);
+  const canSave = clientId && price !== "" && qty <= maxQty && (!fromRental || date >= reservation.startDate);
+
+  return (
+    <Modal title={`Prodat: ${item.name}`} onClose={onClose}>
+      {fromRental ? (
+        <div className="price-box">
+          <div className="price-row">
+            Klient si nechá půjčenou pomůcku: <strong>{clientById(reservation.clientId)?.name || "—"}</strong>
+          </div>
+          <div className="price-row">
+            Výpůjčka od {fmtDate(reservation.startDate)} se tím ukončí ke dni prodeje.
+            {!openEnded && ` Nájem zůstává ${czk(reservation.price)}.`}
+          </div>
+          {openEnded && (
+            <Field label={`Nájem za ${rentalDays} ${rentalDays === 1 ? "den" : rentalDays < 5 ? "dny" : "dní"} (Kč)`}>
+              <input
+                inputMode="numeric"
+                className="mono"
+                value={rentalPrice !== null ? rentalPrice : String(rentalComputed)}
+                onChange={(e) => setRentalPrice(e.target.value.replace(/\D/g, ""))}
+              />
+            </Field>
+          )}
+        </div>
+      ) : clients.length === 0 ? (
+        <div className="empty">Nejprve přidejte klienta.</div>
+      ) : (
+        <Field label="Klient *">
+          <select value={clientId} onChange={(e) => setClientId(e.target.value)}>
+            {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </Field>
+      )}
+
+      <div className="field-row">
+        <Field label="Počet kusů">
+          <input inputMode="numeric" value={quantity} onChange={(e) => setQuantity(e.target.value.replace(/\D/g, ""))} />
+        </Field>
+        <Field label="Prodejní cena celkem (Kč) *">
+          <input inputMode="numeric" className="mono" value={price} onChange={(e) => setPrice(e.target.value.replace(/\D/g, ""))} placeholder="např. 1500" />
+        </Field>
+      </div>
+      {qty > maxQty && <div className="price-warn" style={{ marginTop: -6, marginBottom: 10 }}>K prodeji je teď volných jen {maxQty} ks.</div>}
+      <Field label="Datum prodeje">
+        <input type="date" value={date} min={fromRental ? reservation.startDate : undefined} onChange={(e) => setDate(e.target.value)} />
+      </Field>
+      <Field label="Poznámka">
+        <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="např. faktura č. 12" />
+      </Field>
+      <label className="checkbox-row">
+        <input type="checkbox" checked={paidNow} onChange={(e) => setPaidNow(e.target.checked)} />
+        Zaplaceno hned (zapíše se i platba)
+      </label>
+      {paidNow && (
+        <Field label="Způsob platby">
+          <select value={method} onChange={(e) => setMethod(e.target.value)}>
+            <option>Hotově</option>
+            <option>Kartou</option>
+            <option>Převodem</option>
+          </select>
+        </Field>
+      )}
+      <div className="card-sub" style={{ marginBottom: 12 }}>
+        Prodaný kus ubude ze skladu půjčovny ({item.quantityTotal} → {Math.max(0, item.quantityTotal - qty)} ks).
+      </div>
+
+      <div className="modal-actions">
+        <button
+          className="btn btn-primary"
+          disabled={!canSave}
+          onClick={() =>
+            onSave({
+              clientId,
+              itemId: item.id,
+              quantity: qty,
+              price: Number(price) || 0,
+              date,
+              note,
+              paidNow,
+              method,
+              reservationId: reservation?.id,
+              rentalPrice: openEnded ? rentalFinal : undefined,
+            })
+          }
+        >
+          <ShoppingBag size={16} /> Zapsat prodej
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
 function PaymentModal({ clients, reservation, initial, clientById, onClose, onSave }) {
   const isEdit = !!initial;
   const remaining = reservation ? Math.max(0, reservation.price - reservation.alreadyPaid) : 0;
@@ -2024,7 +2320,9 @@ function PaymentModal({ clients, reservation, initial, clientById, onClose, onSa
   );
   const [method, setMethod] = useState(initial?.method || "Hotově");
   const [variableSymbol, setVariableSymbol] = useState(initial?.variableSymbol || "");
-  const [note, setNote] = useState(initial?.note || "");
+  const [note, setNote] = useState(
+    initial?.note || (reservation?.kind === "sale" ? `Prodej: ${reservation.item?.name || ""}` : "")
+  );
   return (
     <Modal title={isEdit ? "Upravit platbu" : "Nová platba"} onClose={onClose}>
       {clients.length === 0 ? (
@@ -2038,7 +2336,7 @@ function PaymentModal({ clients, reservation, initial, clientById, onClose, onSa
           ) : reservation ? (
             <div className="price-box">
               <div className="price-row">
-                Platba k výpůjčce: <strong>{reservation.item?.name || "—"}</strong> — {reservation.client?.name}
+                Platba {reservation.kind === "sale" ? "za prodej" : "k výpůjčce"}: <strong>{reservation.item?.name || "—"}</strong> — {reservation.client?.name}
               </div>
               <div className="price-row">
                 Cena {czk(reservation.price)}
@@ -2084,7 +2382,8 @@ function PaymentModal({ clients, reservation, initial, clientById, onClose, onSa
               onClick={() =>
                 onSave({
                   clientId,
-                  reservationId: reservation?.id || undefined,
+                  reservationId: reservation && reservation.kind !== "sale" ? reservation.id : undefined,
+                  saleId: reservation?.kind === "sale" ? reservation.id : undefined,
                   date: isEdit ? date : undefined,
                   amount: Number(amount),
                   method,
@@ -2315,6 +2614,7 @@ export function Style() {
       .tier-days { width:44px; border:1px solid #DDD3B8; border-radius:6px; padding:4px 6px; font-size:12.5px; text-align:center; background:#fff; color:#20281F; }
       .tier-rate { flex:1; border:1px solid #DDD3B8; border-radius:6px; padding:6px 8px; font-size:13px; background:#fff; color:#20281F; }
 
+      .pay-pill { display:inline-block; white-space:nowrap; cursor:default; }
       .pay-select {
         font-size:11.5px; border-radius:20px; padding:3px 8px; border:1px solid; font-family:inherit; cursor:pointer;
       }

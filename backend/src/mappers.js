@@ -47,11 +47,26 @@ export function mapService(row) {
   };
 }
 
+export function mapSale(row) {
+  return {
+    id: row.id,
+    clientId: row.client_id,
+    itemId: row.item_id,
+    itemName: row.item_name,
+    reservationId: row.reservation_id,
+    quantity: row.quantity,
+    price: row.price,
+    date: row.date,
+    note: row.note || "",
+  };
+}
+
 export function mapPayment(row) {
   return {
     id: row.id,
     clientId: row.client_id,
     reservationId: row.reservation_id,
+    saleId: row.sale_id || null,
     date: row.date,
     amount: row.amount,
     method: row.method || "",

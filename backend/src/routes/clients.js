@@ -56,6 +56,10 @@ router.delete(
     if (refs.length > 0) {
       return res.status(409).json({ error: "Klient má výpůjčky, nelze smazat." });
     }
+    const { rows: saleRefs } = await pool.query(`SELECT 1 FROM sales WHERE client_id = $1 LIMIT 1`, [id]);
+    if (saleRefs.length > 0) {
+      return res.status(409).json({ error: "Klient má zapsaný nákup, nelze smazat." });
+    }
     const { rowCount } = await pool.query(`DELETE FROM clients WHERE id = $1`, [id]);
     if (rowCount === 0) {
       return res.status(404).json({ error: "Klient nenalezen." });

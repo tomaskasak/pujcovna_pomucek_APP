@@ -102,6 +102,26 @@ CREATE TABLE IF NOT EXISTS services (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Prodej kusu z půjčovny (klient si pomůcku koupí) — prodaný kus ubude z
+-- quantity_total. item_name je kopie názvu, aby historie přežila smazání pomůcky.
+CREATE TABLE IF NOT EXISTS sales (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  client_id UUID NOT NULL REFERENCES clients(id) ON DELETE RESTRICT,
+  item_id UUID REFERENCES items(id) ON DELETE SET NULL,
+  item_name TEXT NOT NULL,
+  -- výpůjčka, ze které prodej vznikl (klient si půjčenou pomůcku nechal)
+  reservation_id UUID REFERENCES reservations(id) ON DELETE SET NULL,
+  quantity INTEGER NOT NULL DEFAULT 1,
+  price INTEGER NOT NULL DEFAULT 0,
+  date DATE NOT NULL DEFAULT CURRENT_DATE,
+  note TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS sale_id UUID REFERENCES sales(id) ON DELETE CASCADE;
+
+CREATE INDEX IF NOT EXISTS idx_sales_client ON sales(client_id);
+CREATE INDEX IF NOT EXISTS idx_payments_sale ON payments(sale_id);
 CREATE INDEX IF NOT EXISTS idx_reservations_client ON reservations(client_id);
 CREATE INDEX IF NOT EXISTS idx_reservations_item ON reservations(item_id);
 CREATE INDEX IF NOT EXISTS idx_reservations_status ON reservations(status);
@@ -120,3 +140,4 @@ ALTER TABLE reservations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE payments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE services ENABLE ROW LEVEL SECURITY;
 ALTER TABLE item_photos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sales ENABLE ROW LEVEL SECURITY;

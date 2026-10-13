@@ -41,7 +41,7 @@ router.put(
     const name = patch.name !== undefined ? String(patch.name).trim() : existing.name;
     const category = patch.category !== undefined ? patch.category : existing.category;
     const quantityTotal =
-      patch.quantityTotal !== undefined ? Math.max(1, Number(patch.quantityTotal) || 1) : existing.quantity_total;
+      patch.quantityTotal !== undefined ? Math.max(0, Number(patch.quantityTotal) || 0) : existing.quantity_total;
     const dailyRate = patch.dailyRate !== undefined ? Number(patch.dailyRate) || 0 : existing.daily_rate;
     const priceTiers = patch.priceTiers !== undefined ? patch.priceTiers : existing.price_tiers;
     const serviceFlag = patch.serviceFlag !== undefined ? !!patch.serviceFlag : existing.service_flag;

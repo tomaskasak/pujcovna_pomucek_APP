@@ -20,6 +20,7 @@ import clientsRouter from "./routes/clients.js";
 import itemsRouter from "./routes/items.js";
 import reservationsRouter from "./routes/reservations.js";
 import paymentsRouter from "./routes/payments.js";
+import salesRouter from "./routes/sales.js";
 import cronRouter from "./routes/cron.js";
 
 dotenv.config();
@@ -49,6 +50,7 @@ app.use("/api/clients", clientsRouter);
 app.use("/api/items", itemsRouter);
 app.use("/api/reservations", reservationsRouter);
 app.use("/api/payments", paymentsRouter);
+app.use("/api/sales", salesRouter);
 
 // V produkci (po `npm run build` ve frontendu) servírujeme hotový build ze stejného originu.
 const frontendDist = path.join(__dirname, "../../frontend/dist");
