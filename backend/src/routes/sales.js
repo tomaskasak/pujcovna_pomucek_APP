@@ -130,6 +130,75 @@ router.post(
   })
 );
 
+// Úprava prodeje/objednávky. Pomůcka se měnit nedá (to je jiný prodej);
+// u skutečně prodané pomůcky se změna počtu kusů promítne do skladu.
+router.put(
+  "/:id",
+  asyncHandler(async (req, res) => {
+    const patch = req.body || {};
+    const db = await pool.connect();
+    try {
+      await db.query("BEGIN");
+      const { rows: saleRows } = await db.query(`SELECT * FROM sales WHERE id = $1 FOR UPDATE`, [req.params.id]);
+      if (saleRows.length === 0) throw new HttpError(404, "Prodej nenalezen.");
+      const sale = saleRows[0];
+
+      const clientId = patch.clientId || sale.client_id;
+      const quantity = patch.quantity !== undefined ? Math.max(1, Number(patch.quantity) || 1) : sale.quantity;
+      const price = patch.price !== undefined ? Number(patch.price) || 0 : sale.price;
+      const date = patch.date || sale.date;
+      const note = patch.note !== undefined ? patch.note || null : sale.note;
+      let itemName = sale.item_name;
+      if (!sale.item_id && patch.itemName !== undefined) {
+        itemName = String(patch.itemName).trim();
+        if (!itemName) throw new HttpError(400, "Název zboží nesmí být prázdný.");
+      }
+      if (price < 0) throw new HttpError(400, "Cena nesmí být záporná.");
+
+      let item = null;
+      const diff = quantity - sale.quantity;
+      if (diff !== 0 && sale.item_id && sale.status === "completed") {
+        const { rows: itemRows } = await db.query(`SELECT * FROM items WHERE id = $1 FOR UPDATE`, [sale.item_id]);
+        if (itemRows.length > 0) {
+          if (diff > 0) {
+            const { rows: occRows } = await db.query(
+              `SELECT COALESCE(SUM(quantity), 0) + ${ORDERED_QTY_SQL} AS rented FROM reservations WHERE item_id = $1 AND status = 'active'`,
+              [sale.item_id]
+            );
+            const availableQty = itemRows[0].quantity_total - Number(occRows[0].rented);
+            if (diff > availableQty) {
+              throw new HttpError(409, `Navýšit jde nejvýš o ${Math.max(0, availableQty)} ks — víc volných kusů není.`);
+            }
+          }
+          const { rows } = await db.query(
+            `UPDATE items SET quantity_total = quantity_total - $1 WHERE id = $2 RETURNING *`,
+            [diff, sale.item_id]
+          );
+          item = rows[0];
+        }
+      }
+
+      const { rows } = await db.query(
+        `UPDATE sales SET client_id = $1, item_name = $2, quantity = $3, price = $4, date = $5, note = $6
+         WHERE id = $7 RETURNING *`,
+        [clientId, itemName, quantity, price, date, note, sale.id]
+      );
+      // platby k prodeji patří stejnému klientovi
+      if (clientId !== sale.client_id) {
+        await db.query(`UPDATE payments SET client_id = $1 WHERE sale_id = $2`, [clientId, sale.id]);
+      }
+      await db.query("COMMIT");
+      res.json({ sale: mapSale(rows[0]), item: item ? mapItem(item) : null });
+    } catch (err) {
+      await db.query("ROLLBACK");
+      if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
+      throw err;
+    } finally {
+      db.release();
+    }
+  })
+);
+
 // Smazání omylem zapsaného prodeje — prodané kusy se vrátí do skladu,
 // navázané platby se smažou spolu s ním (ON DELETE CASCADE).
 // Případně ukončenou výpůjčku to znovu neotvírá.

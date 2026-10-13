@@ -512,6 +512,23 @@ export default function App() {
       showToast(e.message);
     }
   };
+  const updateSale = async (id, patch) => {
+    try {
+      const res = await api.updateSale(id, patch);
+      setData((d) => ({
+        ...d,
+        sales: d.sales.map((s) => (s.id === id ? res.sale : s)),
+        payments: d.payments.map((p) => (p.saleId === id ? { ...p, clientId: res.sale.clientId } : p)),
+        items: res.item
+          ? d.items.map((i) => (i.id === res.item.id ? { ...res.item, photoIds: i.photoIds } : i))
+          : d.items,
+      }));
+      return true;
+    } catch (e) {
+      showToast(e.message);
+      return false;
+    }
+  };
   const cancelSale = async (id) => {
     if (!window.confirm("Zrušit tuto objednávku? Zůstane v historii jako zrušená.")) return;
     try {
@@ -773,6 +790,7 @@ export default function App() {
               paymentDueReservations={paymentDueReservations}
               sales={data.sales}
               onCompleteSale={completeSale}
+              onEditSale={(id) => setModal({ type: "sale-edit", editId: id })}
               onGoto={setTab}
               onApprove={approveReservation}
               onReject={rejectReservation}
@@ -1016,7 +1034,7 @@ export default function App() {
                               )}
                             </td>
                             <td>
-                              <div className="row-actions">
+                              <div className="row-actions sale-actions">
                                 {isOrder && (
                                   <>
                                     <button className="link-btn" onClick={() => completeSale(s.id)} title="Potvrdit prodej">
@@ -1036,6 +1054,9 @@ export default function App() {
                                     <Wallet size={14} /> Platba
                                   </button>
                                 )}
+                                <button className="icon-btn" onClick={() => setModal({ type: "sale-edit", editId: s.id })} title="Upravit">
+                                  <Pencil size={14} />
+                                </button>
                                 <button className="icon-btn danger" onClick={() => removeSale(s.id)} title="Smazat prodej">
                                   <Trash2 size={14} />
                                 </button>
@@ -1424,6 +1445,24 @@ export default function App() {
           }}
         />
       )}
+      {modal?.type === "sale-edit" && (
+        <SaleEditModal
+          sale={data.sales.find((s) => s.id === modal.editId)}
+          clients={data.clients}
+          item={(() => {
+            const s = data.sales.find((x) => x.id === modal.editId);
+            return s?.itemId ? itemById(s.itemId) : null;
+          })()}
+          onClose={() => setModal(null)}
+          onSave={async (patch) => {
+            const ok = await updateSale(modal.editId, patch);
+            if (ok) {
+              setModal(null);
+              showToast("Uloženo");
+            }
+          }}
+        />
+      )}
       {modal?.type === "payment" && (
         <PaymentModal
           clients={data.clients}
@@ -1645,7 +1684,7 @@ export function Empty({ text }) {
 
 const DUE_SOON_DAYS = 5;
 
-function Dashboard({ stats, items, clients, reservations, paymentDueReservations, sales = [], onCompleteSale, onGoto, onApprove, onReject }) {
+function Dashboard({ stats, items, clients, reservations, paymentDueReservations, sales = [], onCompleteSale, onEditSale, onGoto, onApprove, onReject }) {
   const overdueItems = items.filter((i) => i.hasOverdue);
   const openOrders = sales
     .filter((s) => s.status === "ordered")
@@ -1741,7 +1780,9 @@ function Dashboard({ stats, items, clients, reservations, paymentDueReservations
                     </div>
                   </div>
                   <div className="card-foot-actions">
-                    <span />
+                    <button className="link-btn" onClick={() => onEditSale(s.id)}>
+                      <Pencil size={14} /> Upravit
+                    </button>
                     <button className="link-btn" onClick={() => onCompleteSale(s.id)}>
                       <Check size={14} /> Potvrdit prodej
                     </button>
@@ -2535,6 +2576,85 @@ function SaleModal({ clients, item: fixedItem, items = [], reservation, clientBy
   );
 }
 
+function SaleEditModal({ sale, clients, item, onClose, onSave }) {
+  const [clientId, setClientId] = useState(sale?.clientId || "");
+  const [itemName, setItemName] = useState(sale?.itemName || "");
+  const [quantity, setQuantity] = useState(String(sale?.quantity || 1));
+  const [price, setPrice] = useState(String(sale?.price ?? ""));
+  const [date, setDate] = useState(sale?.date || todayISO());
+  const [note, setNote] = useState(sale?.note || "");
+  if (!sale) return null;
+
+  const isOrder = sale.status === "ordered";
+  const manual = !sale.itemId;
+  const qty = Math.max(1, Number(quantity) || 1);
+  const diff = qty - sale.quantity;
+  // u skutečně prodané pomůcky se navýšení bere z volných kusů
+  const tooMany = !isOrder && sale.status === "completed" && item && diff > item.availableQty;
+  const canSave = clientId && price !== "" && (!manual || itemName.trim()) && !tooMany;
+
+  return (
+    <Modal title={isOrder ? "Upravit objednávku" : "Upravit prodej"} onClose={onClose}>
+      {manual ? (
+        <Field label="Název zboží *">
+          <input value={itemName} onChange={(e) => setItemName(e.target.value)} />
+        </Field>
+      ) : (
+        <div className="card-sub" style={{ marginBottom: 12 }}>
+          {sale.itemName} — z půjčovny (pomůcku tu změnit nejde, případně prodej smaž a zapiš znovu)
+        </div>
+      )}
+      <Field label="Klient *">
+        <select value={clientId} onChange={(e) => setClientId(e.target.value)}>
+          {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+      </Field>
+      <div className="field-row">
+        <Field label="Počet kusů">
+          <input inputMode="numeric" value={quantity} onChange={(e) => setQuantity(e.target.value.replace(/\D/g, ""))} />
+        </Field>
+        <Field label="Cena celkem (Kč) *">
+          <input inputMode="numeric" className="mono" value={price} onChange={(e) => setPrice(e.target.value.replace(/\D/g, ""))} />
+        </Field>
+      </div>
+      {tooMany && (
+        <div className="price-warn" style={{ marginTop: -6, marginBottom: 10 }}>
+          Navýšit jde nejvýš o {item.availableQty} ks — víc volných kusů není.
+        </div>
+      )}
+      {!isOrder && sale.status === "completed" && item && diff !== 0 && !tooMany && (
+        <div className="card-sub" style={{ marginTop: -6, marginBottom: 10 }}>
+          Sklad pomůcky se upraví: {item.quantityTotal} → {item.quantityTotal - diff} ks.
+        </div>
+      )}
+      <Field label={isOrder ? "Kdy si to klient vyzvedne / koupí" : "Datum prodeje"}>
+        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+      </Field>
+      <Field label="Poznámka">
+        <input value={note} onChange={(e) => setNote(e.target.value)} />
+      </Field>
+      <div className="modal-actions">
+        <button
+          className="btn btn-primary"
+          disabled={!canSave}
+          onClick={() =>
+            onSave({
+              clientId,
+              itemName: manual ? itemName.trim() : undefined,
+              quantity: qty,
+              price: Number(price) || 0,
+              date,
+              note,
+            })
+          }
+        >
+          Uložit změny
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
 function PaymentModal({ clients, reservation, initial, clientById, onClose, onSave }) {
   const isEdit = !!initial;
   const remaining = reservation ? Math.max(0, reservation.price - reservation.alreadyPaid) : 0;
@@ -2740,6 +2860,7 @@ export function Style() {
       .link-btn:disabled { color:#B4BEBB; cursor:not-allowed; text-decoration:none; }
       .link-btn-danger { color:#B5482F; }
       .row-actions { display:flex; align-items:center; gap:10px; white-space:nowrap; }
+      .row-actions.sale-actions { flex-wrap:wrap; row-gap:6px; max-width:200px; }
       .table-subtext { font-size:11px; color:#8C8470; margin-top:2px; }
       .tel-link { color:inherit; text-decoration:underline; text-decoration-color:#C9BE9C; }
 
