@@ -12,7 +12,7 @@ const router = Router();
 router.get(
   "/items",
   asyncHandler(async (req, res) => {
-    const [items, agg, ranges, photos] = await Promise.all([
+    const [items, agg, ranges, photos, ordered] = await Promise.all([
       pool.query(`SELECT * FROM items ORDER BY name`),
       pool.query(
         `SELECT item_id, COALESCE(SUM(quantity), 0) AS rented
@@ -26,8 +26,14 @@ router.get(
          WHERE status IN ('active', 'pending') ORDER BY start_date`
       ),
       pool.query(`SELECT id, item_id FROM item_photos ORDER BY sort_order`),
+      pool.query(
+        `SELECT item_id, SUM(quantity) AS qty FROM sales WHERE status = 'ordered' AND item_id IS NOT NULL GROUP BY item_id`
+      ),
     ]);
     const rentedByItem = Object.fromEntries(agg.rows.map((r) => [r.item_id, Number(r.rented)]));
+    ordered.rows.forEach((r) => {
+      rentedByItem[r.item_id] = (rentedByItem[r.item_id] || 0) + Number(r.qty);
+    });
     const rangesByItem = {};
     ranges.rows.forEach((r) => {
       (rangesByItem[r.item_id] = rangesByItem[r.item_id] || []).push({ start: r.start_date, end: r.end_date });

@@ -58,6 +58,7 @@ export function mapSale(row) {
     price: row.price,
     date: row.date,
     note: row.note || "",
+    status: row.status || "completed",
   };
 }
 

@@ -2,6 +2,7 @@ import { Router } from "express";
 import { pool } from "../db.js";
 import { asyncHandler } from "../asyncHandler.js";
 import { mapReservation } from "../mappers.js";
+import { ORDERED_QTY_SQL } from "../stock.js";
 
 const router = Router();
 
@@ -22,7 +23,7 @@ router.post(
       return res.status(404).json({ error: "Pomůcka nenalezena." });
     }
     const { rows: activeRows } = await pool.query(
-      `SELECT COALESCE(SUM(quantity), 0) AS rented FROM reservations WHERE item_id = $1 AND status = 'active'`,
+      `SELECT COALESCE(SUM(quantity), 0) + ${ORDERED_QTY_SQL} AS rented FROM reservations WHERE item_id = $1 AND status = 'active'`,
       [itemId]
     );
     const availableQty = itemRows[0].quantity_total - Number(activeRows[0].rented);
@@ -75,7 +76,7 @@ router.put(
       const { rows: itemRows } = await pool.query(`SELECT quantity_total FROM items WHERE id = $1`, [existing.item_id]);
       if (itemRows.length > 0) {
         const { rows: otherRows } = await pool.query(
-          `SELECT COALESCE(SUM(quantity), 0) AS rented FROM reservations
+          `SELECT COALESCE(SUM(quantity), 0) + ${ORDERED_QTY_SQL} AS rented FROM reservations
            WHERE item_id = $1 AND status IN ('active', 'pending') AND id != $2`,
           [existing.item_id, req.params.id]
         );
@@ -137,7 +138,7 @@ router.put(
       const { rows: itemRows } = await pool.query(`SELECT quantity_total FROM items WHERE id = $1`, [reservation.item_id]);
       if (itemRows.length > 0) {
         const { rows: activeRows } = await pool.query(
-          `SELECT COALESCE(SUM(quantity), 0) AS rented FROM reservations WHERE item_id = $1 AND status = 'active'`,
+          `SELECT COALESCE(SUM(quantity), 0) + ${ORDERED_QTY_SQL} AS rented FROM reservations WHERE item_id = $1 AND status = 'active'`,
           [reservation.item_id]
         );
         const availableQty = itemRows[0].quantity_total - Number(activeRows[0].rented);
@@ -174,7 +175,7 @@ router.put(
       return res.status(404).json({ error: "Pomůcka nenalezena." });
     }
     const { rows: activeRows } = await pool.query(
-      `SELECT COALESCE(SUM(quantity), 0) AS rented FROM reservations WHERE item_id = $1 AND status = 'active'`,
+      `SELECT COALESCE(SUM(quantity), 0) + ${ORDERED_QTY_SQL} AS rented FROM reservations WHERE item_id = $1 AND status = 'active'`,
       [reservation.item_id]
     );
     const availableQty = itemRows[0].quantity_total - Number(activeRows[0].rented);

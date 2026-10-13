@@ -120,6 +120,13 @@ CREATE TABLE IF NOT EXISTS sales (
 
 ALTER TABLE payments ADD COLUMN IF NOT EXISTS sale_id UUID REFERENCES sales(id) ON DELETE CASCADE;
 
+-- ordered = klient si zboží objednal/zarezervoval na pozdější datum (date),
+-- kus z půjčovny je do potvrzení blokovaný, ale ze skladu ještě neubyl;
+-- completed = skutečně prodáno; cancelled = objednávka zrušena
+ALTER TABLE sales ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'completed';
+ALTER TABLE sales DROP CONSTRAINT IF EXISTS sales_status_check;
+ALTER TABLE sales ADD CONSTRAINT sales_status_check CHECK (status IN ('ordered', 'completed', 'cancelled'));
+
 CREATE INDEX IF NOT EXISTS idx_sales_client ON sales(client_id);
 CREATE INDEX IF NOT EXISTS idx_payments_sale ON payments(sale_id);
 CREATE INDEX IF NOT EXISTS idx_reservations_client ON reservations(client_id);

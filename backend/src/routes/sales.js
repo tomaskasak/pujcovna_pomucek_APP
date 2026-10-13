@@ -2,6 +2,7 @@ import { Router } from "express";
 import { pool } from "../db.js";
 import { asyncHandler } from "../asyncHandler.js";
 import { mapSale, mapItem, mapReservation, mapPayment } from "../mappers.js";
+import { ORDERED_QTY_SQL } from "../stock.js";
 
 const router = Router();
 
@@ -17,7 +18,7 @@ class HttpError extends Error {
 router.post(
   "/",
   asyncHandler(async (req, res) => {
-    const { clientId, itemId, itemName, quantity, price, date, note, paidNow, method, reservationId, rentalPrice } =
+    const { clientId, itemId, itemName, quantity, price, date, note, paidNow, method, reservationId, rentalPrice, ordered } =
       req.body || {};
     const manualName = (itemName || "").trim();
     const qty = Math.max(1, Number(quantity) || 1);
@@ -29,6 +30,9 @@ router.post(
     }
     if (!itemId && reservationId) {
       return res.status(400).json({ error: "Prodej z výpůjčky musí mít pomůcku." });
+    }
+    if (ordered && reservationId) {
+      return res.status(400).json({ error: "Prodej z výpůjčky nejde zapsat jako objednávku." });
     }
     if (salePrice < 0) {
       return res.status(400).json({ error: "Cena nesmí být záporná." });
@@ -67,9 +71,11 @@ router.post(
       }
 
       let itemUpdated = null;
-      if (item) {
+      if (item && ordered) {
+        itemUpdated = item;
+      } else if (item) {
         const { rows: activeRows } = await db.query(
-          `SELECT COALESCE(SUM(quantity), 0) AS rented FROM reservations WHERE item_id = $1 AND status = 'active'`,
+          `SELECT COALESCE(SUM(quantity), 0) + ${ORDERED_QTY_SQL} AS rented FROM reservations WHERE item_id = $1 AND status = 'active'`,
           [itemId]
         );
         const availableQty = item.quantity_total - Number(activeRows[0].rented);
@@ -84,9 +90,9 @@ router.post(
       }
 
       const { rows: saleRows } = await db.query(
-        `INSERT INTO sales (client_id, item_id, item_name, reservation_id, quantity, price, date, note)
-         VALUES ($1, $2, $3, $4, $5, $6, COALESCE($7::date, CURRENT_DATE), $8) RETURNING *`,
-        [clientId, itemId || null, name, reservationId || null, qty, salePrice, saleDate, note || null]
+        `INSERT INTO sales (client_id, item_id, item_name, reservation_id, quantity, price, date, note, status)
+         VALUES ($1, $2, $3, $4, $5, $6, COALESCE($7::date, CURRENT_DATE), $8, $9) RETURNING *`,
+        [clientId, itemId || null, name, reservationId || null, qty, salePrice, saleDate, note || null, ordered ? "ordered" : "completed"]
       );
       const sale = saleRows[0];
 
@@ -94,8 +100,15 @@ router.post(
       if (paidNow && salePrice > 0) {
         const { rows: payRows } = await db.query(
           `INSERT INTO payments (client_id, sale_id, date, amount, method, note)
-           VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-          [clientId, sale.id, sale.date, salePrice, method || null, `Prodej: ${name}${qty > 1 ? ` ×${qty}` : ""}`]
+           VALUES ($1, $2, COALESCE($3::date, CURRENT_DATE), $4, $5, $6) RETURNING *`,
+          [
+            clientId,
+            sale.id,
+            ordered ? null : sale.date, // záloha k objednávce se platí dnes
+            salePrice,
+            method || null,
+            `${ordered ? "Objednávka" : "Prodej"}: ${name}${qty > 1 ? ` ×${qty}` : ""}`,
+          ]
         );
         payment = payRows[0];
       }
@@ -133,7 +146,7 @@ router.delete(
       }
       const sale = saleRows[0];
       let item = null;
-      if (sale.item_id) {
+      if (sale.item_id && sale.status === "completed") {
         const { rows } = await db.query(
           `UPDATE items SET quantity_total = quantity_total + $1 WHERE id = $2 RETURNING *`,
           [sale.quantity, sale.item_id]
@@ -149,6 +162,68 @@ router.delete(
     } finally {
       db.release();
     }
+  })
+);
+
+// Potvrzení objednávky = skutečný prodej: teprve teď kus ubude ze skladu.
+router.post(
+  "/:id/complete",
+  asyncHandler(async (req, res) => {
+    const { date } = req.body || {};
+    const db = await pool.connect();
+    try {
+      await db.query("BEGIN");
+      const { rows: saleRows } = await db.query(`SELECT * FROM sales WHERE id = $1 FOR UPDATE`, [req.params.id]);
+      if (saleRows.length === 0) throw new HttpError(404, "Objednávka nenalezena.");
+      const sale = saleRows[0];
+      if (sale.status !== "ordered") throw new HttpError(409, "Tahle objednávka už je vyřízená.");
+
+      let item = null;
+      if (sale.item_id) {
+        const { rows: itemRows } = await db.query(`SELECT * FROM items WHERE id = $1 FOR UPDATE`, [sale.item_id]);
+        if (itemRows.length > 0) {
+          // obsazenost bez této objednávky samotné
+          const { rows: occRows } = await db.query(
+            `SELECT COALESCE(SUM(quantity), 0) + ${ORDERED_QTY_SQL} AS rented FROM reservations WHERE item_id = $1 AND status = 'active'`,
+            [sale.item_id]
+          );
+          const availableQty = itemRows[0].quantity_total - (Number(occRows[0].rented) - sale.quantity);
+          if (sale.quantity > availableQty) {
+            throw new HttpError(409, `Nelze potvrdit — volných je teď jen ${Math.max(0, availableQty)} ks (kus je možná ještě půjčený).`);
+          }
+          const { rows } = await db.query(
+            `UPDATE items SET quantity_total = quantity_total - $1 WHERE id = $2 RETURNING *`,
+            [sale.quantity, sale.item_id]
+          );
+          item = rows[0];
+        }
+      }
+      const { rows } = await db.query(
+        `UPDATE sales SET status = 'completed', date = COALESCE($1::date, CURRENT_DATE) WHERE id = $2 RETURNING *`,
+        [date || null, sale.id]
+      );
+      await db.query("COMMIT");
+      res.json({ sale: mapSale(rows[0]), item: item ? mapItem(item) : null });
+    } catch (err) {
+      await db.query("ROLLBACK");
+      if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
+      throw err;
+    } finally {
+      db.release();
+    }
+  })
+);
+
+// Zrušení objednávky — zůstane v historii (kvůli kontaktu), blokovaný kus se uvolní.
+router.post(
+  "/:id/cancel",
+  asyncHandler(async (req, res) => {
+    const { rows } = await pool.query(
+      `UPDATE sales SET status = 'cancelled' WHERE id = $1 AND status = 'ordered' RETURNING *`,
+      [req.params.id]
+    );
+    if (rows.length === 0) return res.status(404).json({ error: "Objednávka nenalezena nebo už je vyřízená." });
+    res.json({ sale: mapSale(rows[0]) });
   })
 );
 

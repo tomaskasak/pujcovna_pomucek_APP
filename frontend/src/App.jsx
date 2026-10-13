@@ -179,6 +179,10 @@ export default function App() {
 
   // derived: item live status + stock, considering overdue and quantities
   const itemsWithStatus = useMemo(() => {
+    const orderedByItem = {};
+    data.sales.forEach((s) => {
+      if (s.status === "ordered" && s.itemId) orderedByItem[s.itemId] = (orderedByItem[s.itemId] || 0) + Number(s.quantity || 1);
+    });
     const activeReservationsByItem = {};
     data.reservations.forEach((r) => {
       if (r.status === "active") {
@@ -189,7 +193,8 @@ export default function App() {
       const total = Number(it.quantityTotal ?? 1);
       const activeList = activeReservationsByItem[it.id] || [];
       const rentedQty = activeList.reduce((s, r) => s + Number(r.quantity || 1), 0);
-      const availableQty = Math.max(0, total - rentedQty);
+      const orderedQty = orderedByItem[it.id] || 0;
+      const availableQty = Math.max(0, total - rentedQty - orderedQty);
       const hasOverdue = activeList.some((r) => r.endDate && r.endDate < todayISO());
       let status = "available";
       if (it.serviceFlag) status = "service";
@@ -199,6 +204,7 @@ export default function App() {
         ...it,
         quantityTotal: total,
         rentedQty,
+        orderedQty,
         availableQty,
         status,
         hasOverdue,
@@ -206,7 +212,7 @@ export default function App() {
         activeReservations: activeList,
       };
     });
-  }, [data.items, data.reservations]);
+  }, [data.items, data.reservations, data.sales]);
 
   const clientById = (id) => data.clients.find((c) => c.id === id);
   const itemById = (id) => itemsWithStatus.find((i) => i.id === id);
@@ -484,8 +490,40 @@ export default function App() {
       return false;
     }
   };
+  const completeSale = async (id) => {
+    const sale = data.sales.find((s) => s.id === id);
+    if (
+      !window.confirm(
+        `Potvrdit prodej: ${sale?.itemName || ""}${sale?.itemId ? "\n\nKus tím ubude ze skladu půjčovny." : ""}`
+      )
+    )
+      return;
+    try {
+      const res = await api.completeSale(id, { date: todayISO() });
+      setData((d) => ({
+        ...d,
+        sales: d.sales.map((s) => (s.id === id ? res.sale : s)),
+        items: res.item
+          ? d.items.map((i) => (i.id === res.item.id ? { ...res.item, photoIds: i.photoIds } : i))
+          : d.items,
+      }));
+      showToast("Prodej potvrzen");
+    } catch (e) {
+      showToast(e.message);
+    }
+  };
+  const cancelSale = async (id) => {
+    if (!window.confirm("Zrušit tuto objednávku? Zůstane v historii jako zrušená.")) return;
+    try {
+      const res = await api.cancelSale(id);
+      setData((d) => ({ ...d, sales: d.sales.map((s) => (s.id === id ? res.sale : s)) }));
+      showToast("Objednávka zrušena");
+    } catch (e) {
+      showToast(e.message);
+    }
+  };
   const removeSale = async (id) => {
-    if (!window.confirm("Smazat tento prodej? Prodané kusy se vrátí do skladu a smažou se i platby k němu.")) return;
+    if (!window.confirm("Smazat tento záznam úplně? Prodané kusy se vrátí do skladu a smažou se i platby k němu.")) return;
     try {
       const res = await api.deleteSale(id);
       setData((d) => ({
@@ -551,6 +589,7 @@ export default function App() {
       (item?.name || "").toLowerCase().includes(q)
     );
   };
+  const saleOrder = (s) => (s.status === "ordered" ? 0 : 1);
   const filteredSales = data.sales.filter((s) => {
     if (!q) return true;
     const client = data.clients.find((c) => c.id === s.clientId);
@@ -560,7 +599,14 @@ export default function App() {
       (client?.address || "").toLowerCase().includes(q) ||
       (s.itemName || "").toLowerCase().includes(q)
     );
-  });
+  }).sort((a, b) =>
+    saleOrder(a) !== saleOrder(b)
+      ? saleOrder(a) - saleOrder(b)
+      : saleOrder(a) === 0
+        ? (a.date || "").localeCompare(b.date || "")
+        : (b.date || "").localeCompare(a.date || "")
+  );
+  const orderedSalesCount = data.sales.filter((s) => s.status === "ordered").length;
   const sortedReservations = data.reservations
     .filter((r) => (resView === "archive" ? isArchived(r) : !isArchived(r)))
     .filter(reservationMatches)
@@ -725,6 +771,8 @@ export default function App() {
               clients={data.clients}
               reservations={data.reservations}
               paymentDueReservations={paymentDueReservations}
+              sales={data.sales}
+              onCompleteSale={completeSale}
               onGoto={setTab}
               onApprove={approveReservation}
               onReject={rejectReservation}
@@ -845,6 +893,7 @@ export default function App() {
                     <span className="stock-pill">Skladem: {it.quantityTotal}</span>
                     <span className={"stock-pill" + (it.availableQty === 0 ? " stock-empty" : "")}>Volno: {it.availableQty}</span>
                     {it.rentedQty > 0 && <span className="stock-pill">Půjčeno: {it.rentedQty}</span>}
+                    {it.orderedQty > 0 && <span className="stock-pill stock-ordered">Objednáno k prodeji: {it.orderedQty}</span>}
                   </div>
                   {it.activeReservations && it.activeReservations.length > 0 && (
                     <div className="mini-list">
@@ -890,6 +939,7 @@ export default function App() {
               </button>
               <button className={resView === "sales" ? "active" : ""} onClick={() => setResView("sales")}>
                 <ShoppingBag size={14} /> Prodeje ({data.sales.length})
+                {orderedSalesCount > 0 && <span className="segment-badge">{orderedSalesCount} objedn.</span>}
               </button>
             </div>
             {resView === "archive" && (
@@ -925,9 +975,20 @@ export default function App() {
                         const client = clientById(s.clientId);
                         const paid = paidBySale[s.id] || 0;
                         const remaining = s.price - paid;
+                        const isOrder = s.status === "ordered";
+                        const cancelled = s.status === "cancelled";
+                        const late = isOrder && s.date < todayISO();
                         return (
-                          <tr key={s.id}>
-                            <td className="mono">{fmtDate(s.date)}</td>
+                          <tr key={s.id} className={cancelled ? "row-muted" : ""}>
+                            <td className="mono">
+                              {fmtDate(s.date)}
+                              {isOrder && (
+                                <div className={"table-subtext order-tag" + (late ? " order-late" : "")}>
+                                  {late ? "objednáno · po termínu" : "objednáno · vyzvednutí"}
+                                </div>
+                              )}
+                              {cancelled && <div className="table-subtext">objednávka zrušena</div>}
+                            </td>
                             <td>
                               {client?.name || "—"}
                               {client?.phone && (
@@ -944,7 +1005,9 @@ export default function App() {
                             </td>
                             <td className="mono">{czk(s.price)}</td>
                             <td>
-                              {remaining <= 0 ? (
+                              {cancelled ? (
+                                paid > 0 ? <span className="pay-select pay-pill pay-zaloha">záloha {czk(paid)}</span> : "—"
+                              ) : remaining <= 0 ? (
                                 <span className="pay-select pay-pill pay-zaplaceno">Zaplaceno</span>
                               ) : paid > 0 ? (
                                 <span className="pay-select pay-pill pay-zaloha">zbývá {czk(remaining)}</span>
@@ -954,7 +1017,17 @@ export default function App() {
                             </td>
                             <td>
                               <div className="row-actions">
-                                {remaining > 0 && (
+                                {isOrder && (
+                                  <>
+                                    <button className="link-btn" onClick={() => completeSale(s.id)} title="Potvrdit prodej">
+                                      <Check size={14} /> Potvrdit
+                                    </button>
+                                    <button className="link-btn link-btn-danger" onClick={() => cancelSale(s.id)}>
+                                      Zrušit
+                                    </button>
+                                  </>
+                                )}
+                                {remaining > 0 && !cancelled && (
                                   <button
                                     className="link-btn"
                                     onClick={() => setModal({ type: "payment", saleId: s.id })}
@@ -1328,15 +1401,25 @@ export default function App() {
         <SaleModal
           clients={data.clients}
           item={modal.itemId ? itemById(modal.itemId) : null}
-          items={itemsWithStatus.filter((i) => !i.serviceFlag && i.availableQty > 0)}
+          items={itemsWithStatus.filter((i) => !i.serviceFlag)}
           reservation={modal.reservationId ? data.reservations.find((r) => r.id === modal.reservationId) : null}
           clientById={clientById}
           onClose={() => setModal(null)}
           onSave={async (s) => {
+            if (s.newClient) {
+              try {
+                const created = await api.createClient(s.newClient);
+                setData((d) => ({ ...d, clients: [...d.clients, created] }));
+                s = { ...s, clientId: created.id, newClient: undefined };
+              } catch (e) {
+                showToast(e.message);
+                return;
+              }
+            }
             const ok = await addSale(s);
             if (ok) {
               setModal(null);
-              showToast(s.reservationId ? "Prodáno — výpůjčka ukončena" : "Prodej zapsán");
+              showToast(s.ordered ? "Objednávka zapsána" : s.reservationId ? "Prodáno — výpůjčka ukončena" : "Prodej zapsán");
             }
           }}
         />
@@ -1562,8 +1645,11 @@ export function Empty({ text }) {
 
 const DUE_SOON_DAYS = 5;
 
-function Dashboard({ stats, items, clients, reservations, paymentDueReservations, onGoto, onApprove, onReject }) {
+function Dashboard({ stats, items, clients, reservations, paymentDueReservations, sales = [], onCompleteSale, onGoto, onApprove, onReject }) {
   const overdueItems = items.filter((i) => i.hasOverdue);
+  const openOrders = sales
+    .filter((s) => s.status === "ordered")
+    .sort((a, b) => (a.date || "").localeCompare(b.date || ""));
   const pendingReservations = reservations.filter((r) => r.status === "pending");
   // aktivní výpůjčky s pevným datem vrácení, které se blíží (ale ještě
   // nejsou po termínu) — doplňuje "Po termínu vrácení" o pohled dopředu
@@ -1616,6 +1702,49 @@ function Dashboard({ stats, items, clients, reservations, paymentDueReservations
                         {client?.name} · {daysSincePayment} dní bez zaznamenané platby
                       </div>
                     </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+
+      {openOrders.length > 0 && (
+        <>
+          <div className="section-title">Objednávky k vyřízení ({openOrders.length})</div>
+          <div className="grid-cards">
+            {openOrders.map((s) => {
+              const client = clients.find((c) => c.id === s.clientId);
+              const days = daysBetween(todayISO(), s.date);
+              const when = days < 0 ? `po termínu (${fmtDate(s.date)})` : days === 0 ? "dnes" : days === 1 ? "zítra" : `${fmtDate(s.date)} (za ${days} dní)`;
+              return (
+                <div className="card" key={s.id}>
+                  <div className="card-row">
+                    <ShoppingBag size={16} color={days < 0 ? "#B5482F" : "#8A6D3B"} />
+                    <div className="grow">
+                      <div className="card-title">
+                        {s.itemName}
+                        {s.quantity > 1 ? ` ×${s.quantity}` : ""}
+                      </div>
+                      <div className="card-sub">
+                        {client?.name || "—"}
+                        {client?.phone && (
+                          <>
+                            {" · "}
+                            <a className="tel-link" href={`tel:${client.phone.replace(/\s/g, "")}`}>{client.phone}</a>
+                          </>
+                        )}
+                      </div>
+                      <div className="card-sub">Vyzvednutí: {when} · {czk(s.price)}</div>
+                      {s.note && <div className="card-note">{s.note}</div>}
+                    </div>
+                  </div>
+                  <div className="card-foot-actions">
+                    <span />
+                    <button className="link-btn" onClick={() => onCompleteSale(s.id)}>
+                      <Check size={14} /> Potvrdit prodej
+                    </button>
                   </div>
                 </div>
               );
@@ -2222,6 +2351,17 @@ function SaleModal({ clients, item: fixedItem, items = [], reservation, clientBy
   const [note, setNote] = useState("");
   const [paidNow, setPaidNow] = useState(true);
   const [method, setMethod] = useState("Hotově");
+  // objednávka = klient si to vyzvedne/koupí později (např. volal, že chce postel na pondělí)
+  const [ordered, setOrdered] = useState(false);
+  const NEW_CLIENT = "__new__";
+  const [newClientName, setNewClientName] = useState("");
+  const [newClientPhone, setNewClientPhone] = useState("");
+  const isNewClient = clientId === NEW_CLIENT || clients.length === 0;
+
+  const setMode = (o) => {
+    setOrdered(o);
+    setPaidNow(!o);
+  };
 
   // výpůjčka bez pevného data vrácení: nájem se uzavře ke dni prodeje
   const openEnded = fromRental && !reservation.endDate;
@@ -2235,14 +2375,28 @@ function SaleModal({ clients, item: fixedItem, items = [], reservation, clientBy
   // u prodeje z výpůjčky se půjčený kus nejdřív "vrátí", takže je k dispozici i on
   const maxQty = manual ? Infinity : item.availableQty + (fromRental ? reservation.quantity || 1 : 0);
   const canSave =
-    clientId &&
+    (isNewClient ? newClientName.trim() : clientId) &&
     price !== "" &&
-    qty <= maxQty &&
+    (ordered || qty <= maxQty) &&
     (!manual || manualName.trim()) &&
     (!fromRental || date >= reservation.startDate);
 
   return (
-    <Modal title={fixedItem ? `Prodat: ${fixedItem.name}` : "Nový prodej"} onClose={onClose}>
+    <Modal
+      title={ordered ? "Nová objednávka" : fixedItem ? `Prodat: ${fixedItem.name}` : "Nový prodej"}
+      onClose={onClose}
+    >
+      {!fromRental && (
+        <div className="segment order-toggle">
+          <button type="button" className={!ordered ? "active" : ""} onClick={() => setMode(false)}>
+            Prodat hned
+          </button>
+          <button type="button" className={ordered ? "active" : ""} onClick={() => setMode(true)}>
+            Objednávka na později
+          </button>
+        </div>
+      )}
+      {fixedItem && ordered && <div className="card-sub" style={{ marginBottom: 12 }}>{fixedItem.name}</div>}
       {!fixedItem && (
         <>
           <Field label="Co klient kupuje *">
@@ -2282,14 +2436,25 @@ function SaleModal({ clients, item: fixedItem, items = [], reservation, clientBy
             </Field>
           )}
         </div>
-      ) : clients.length === 0 ? (
-        <div className="empty">Nejprve přidejte klienta.</div>
       ) : (
+        <>
         <Field label="Klient *">
-          <select value={clientId} onChange={(e) => setClientId(e.target.value)}>
+          <select value={isNewClient ? NEW_CLIENT : clientId} onChange={(e) => setClientId(e.target.value)}>
+            <option value={NEW_CLIENT}>+ Nový klient…</option>
             {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </Field>
+        {isNewClient && (
+          <div className="field-row">
+            <Field label="Jméno *">
+              <input value={newClientName} onChange={(e) => setNewClientName(e.target.value)} placeholder="Jan Novák" />
+            </Field>
+            <Field label="Telefon">
+              <input inputMode="tel" value={newClientPhone} onChange={(e) => setNewClientPhone(e.target.value)} placeholder="603 123 456" />
+            </Field>
+          </div>
+        )}
+        </>
       )}
 
       <div className="field-row">
@@ -2300,16 +2465,27 @@ function SaleModal({ clients, item: fixedItem, items = [], reservation, clientBy
           <input inputMode="numeric" className="mono" value={price} onChange={(e) => setPrice(e.target.value.replace(/\D/g, ""))} placeholder="např. 1500" />
         </Field>
       </div>
-      {qty > maxQty && <div className="price-warn" style={{ marginTop: -6, marginBottom: 10 }}>K prodeji je teď volných jen {maxQty} ks.</div>}
-      <Field label="Datum prodeje">
-        <input type="date" value={date} min={fromRental ? reservation.startDate : undefined} onChange={(e) => setDate(e.target.value)} />
+      {qty > maxQty && (
+        <div className="price-warn" style={{ marginTop: -6, marginBottom: 10 }}>
+          {ordered
+            ? `Teď je volných jen ${maxQty} ks — objednat jde, ale potvrdit prodej půjde, až bude kus volný.`
+            : `K prodeji je teď volných jen ${maxQty} ks.`}
+        </div>
+      )}
+      <Field label={ordered ? "Kdy si to klient vyzvedne / koupí" : "Datum prodeje"}>
+        <input
+          type="date"
+          value={date}
+          min={fromRental ? reservation.startDate : ordered ? todayISO() : undefined}
+          onChange={(e) => setDate(e.target.value)}
+        />
       </Field>
       <Field label="Poznámka">
         <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="např. faktura č. 12" />
       </Field>
       <label className="checkbox-row">
         <input type="checkbox" checked={paidNow} onChange={(e) => setPaidNow(e.target.checked)} />
-        Zaplaceno hned (zapíše se i platba)
+        {ordered ? "Zaplaceno předem (zapíše se platba)" : "Zaplaceno hned (zapíše se i platba)"}
       </label>
       {paidNow && (
         <Field label="Způsob platby">
@@ -2322,8 +2498,12 @@ function SaleModal({ clients, item: fixedItem, items = [], reservation, clientBy
       )}
       <div className="card-sub" style={{ marginBottom: 12 }}>
         {manual
-          ? "Zboží mimo půjčovnu — sklad pomůcek se nemění."
-          : `Prodaný kus ubude ze skladu půjčovny (${item.quantityTotal} → ${Math.max(0, item.quantityTotal - qty)} ks).`}
+          ? ordered
+            ? "Zboží mimo půjčovnu — až ho klient převezme, potvrdíš prodej."
+            : "Zboží mimo půjčovnu — sklad pomůcek se nemění."
+          : ordered
+            ? "Kus bude do potvrzení prodeje zablokovaný (nepůjde půjčit), ze skladu ubude až po potvrzení."
+            : `Prodaný kus ubude ze skladu půjčovny (${item.quantityTotal} → ${Math.max(0, item.quantityTotal - qty)} ks).`}
       </div>
 
       <div className="modal-actions">
@@ -2332,7 +2512,9 @@ function SaleModal({ clients, item: fixedItem, items = [], reservation, clientBy
           disabled={!canSave}
           onClick={() =>
             onSave({
-              clientId,
+              clientId: isNewClient ? undefined : clientId,
+              newClient: isNewClient ? { name: newClientName.trim(), phone: newClientPhone.trim() } : undefined,
+              ordered,
               itemId: item ? item.id : undefined,
               itemName: manual ? manualName.trim() : undefined,
               quantity: qty,
@@ -2346,7 +2528,7 @@ function SaleModal({ clients, item: fixedItem, items = [], reservation, clientBy
             })
           }
         >
-          <ShoppingBag size={16} /> Zapsat prodej
+          <ShoppingBag size={16} /> {ordered ? "Zapsat objednávku" : "Zapsat prodej"}
         </button>
       </div>
     </Modal>
@@ -2567,6 +2749,13 @@ export function Style() {
         font-size:13px; font-family:inherit; color:#6B6555; cursor:pointer;
       }
       .segment button.active { background:#fff; color:#2F5D3F; font-weight:600; box-shadow:0 1px 2px rgba(32,40,31,0.12); }
+      .segment-badge { font-size:10.5px; background:#F6F0E4; color:#8A6D3B; border:1px solid #EADFC4; border-radius:20px; padding:1px 7px; }
+      .stock-pill.stock-ordered { background:#F6F0E4; color:#8A6D3B; border-color:#EADFC4; }
+      .order-tag { color:#8A6D3B; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+      .order-tag.order-late { color:#B5482F; font-weight:600; }
+      .row-muted td { opacity:0.55; }
+      .order-toggle { display:flex; margin-bottom:14px; }
+      .order-toggle button { flex:1; justify-content:center; }
       .segment-hint { font-size:12px; color:#8C8470; margin:-4px 0 12px; }
       .paid-subtext { color:#3F8D5E; font-weight:600; }
       .payment-due-subtext { color:#8A6D3B; font-weight:600; }

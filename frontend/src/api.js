@@ -68,4 +68,6 @@ export const api = {
 
   createSale: (data) => request("/sales", { method: "POST", body: JSON.stringify(data) }),
   deleteSale: (id) => request(`/sales/${id}`, { method: "DELETE" }),
+  completeSale: (id, data) => request(`/sales/${id}/complete`, { method: "POST", body: JSON.stringify(data || {}) }),
+  cancelSale: (id) => request(`/sales/${id}/cancel`, { method: "POST" }),
 };
