@@ -469,6 +469,26 @@ export default function App() {
       return false;
     }
   };
+  const startReturn = (r) => {
+    if (!r.endDate) {
+      setModal({ type: "reservation-return", editId: r.id });
+      return;
+    }
+    const paid = paidByReservation[r.id] || 0;
+    const remaining = r.price - paid;
+    if (
+      paid > 0 &&
+      !window.confirm(
+        `Cena ${czk(r.price)}, již zaplaceno ${czk(paid)}${
+          remaining > 0 ? ` — zbývá doplatit ${czk(remaining)}.` : ", nic nezbývá."
+        }\n\nUkončit výpůjčku?`
+      )
+    ) {
+      return;
+    }
+    returnReservation(r.id);
+  };
+
   const addSale = async (s) => {
     try {
       const res = await api.createSale(s);
@@ -791,6 +811,12 @@ export default function App() {
               sales={data.sales}
               onCompleteSale={completeSale}
               onEditSale={(id) => setModal({ type: "sale-edit", editId: id })}
+              onPaySale={(id) => setModal({ type: "payment", saleId: id })}
+              paidBySale={paidBySale}
+              paidByReservation={paidByReservation}
+              onEditReservation={(id) => setModal({ type: "reservation-edit", editId: id })}
+              onPayReservation={(id) => setModal({ type: "payment", reservationId: id })}
+              onReturnReservation={startReturn}
               onGoto={setTab}
               onApprove={approveReservation}
               onReject={rejectReservation}
@@ -1171,28 +1197,7 @@ export default function App() {
                           <td>
                             <div className="row-actions">
                               {r.status === "active" && (
-                                <button
-                                  className="link-btn"
-                                  onClick={() => {
-                                    if (!r.endDate) {
-                                      setModal({ type: "reservation-return", editId: r.id });
-                                      return;
-                                    }
-                                    const paid = paidByReservation[r.id] || 0;
-                                    const remaining = r.price - paid;
-                                    if (
-                                      paid > 0 &&
-                                      !window.confirm(
-                                        `Cena ${czk(r.price)}, již zaplaceno ${czk(paid)}${
-                                          remaining > 0 ? ` — zbývá doplatit ${czk(remaining)}.` : ", nic nezbývá."
-                                        }\n\nUkončit výpůjčku?`
-                                      )
-                                    ) {
-                                      return;
-                                    }
-                                    returnReservation(r.id);
-                                  }}
-                                >
+                                <button className="link-btn" onClick={() => startReturn(r)}>
                                   <Check size={14} /> Vrátit
                                 </button>
                               )}
@@ -1684,25 +1689,80 @@ export function Empty({ text }) {
 
 const DUE_SOON_DAYS = 5;
 
-function Dashboard({ stats, items, clients, reservations, paymentDueReservations, sales = [], onCompleteSale, onEditSale, onGoto, onApprove, onReject }) {
-  const overdueItems = items.filter((i) => i.hasOverdue);
+function DashClient({ client }) {
+  if (!client) return <>—</>;
+  return (
+    <>
+      {client.name}
+      {client.phone && (
+        <>
+          {" · "}
+          <a className="tel-link" href={`tel:${client.phone.replace(/\s/g, "")}`} onClick={(e) => e.stopPropagation()}>
+            {client.phone}
+          </a>
+        </>
+      )}
+    </>
+  );
+}
+
+function Dashboard({
+  stats,
+  items,
+  clients,
+  reservations,
+  paymentDueReservations,
+  sales = [],
+  paidBySale = {},
+  paidByReservation = {},
+  onCompleteSale,
+  onEditSale,
+  onPaySale,
+  onEditReservation,
+  onPayReservation,
+  onReturnReservation,
+  onGoto,
+  onApprove,
+  onReject,
+}) {
   const openOrders = sales
     .filter((s) => s.status === "ordered")
     .sort((a, b) => (a.date || "").localeCompare(b.date || ""));
   const pendingReservations = reservations.filter((r) => r.status === "pending");
+  const today = todayISO();
+  const itemName = (id) => items.find((i) => i.id === id)?.name || "—";
+  const clientOf = (id) => clients.find((c) => c.id === id);
   // aktivní výpůjčky s pevným datem vrácení, které se blíží (ale ještě
   // nejsou po termínu) — doplňuje "Po termínu vrácení" o pohled dopředu
-  const dueSoonItems = items
-    .map((it) => {
-      const res = (it.activeReservations || []).find((r) => {
-        if (!r.endDate) return false;
-        const days = daysBetween(todayISO(), r.endDate);
-        return days >= 0 && days <= DUE_SOON_DAYS;
-      });
-      return res ? { item: it, reservation: res, daysLeft: daysBetween(todayISO(), res.endDate) } : null;
-    })
-    .filter(Boolean)
+  const dueSoon = reservations
+    .filter((r) => r.status === "active" && r.endDate && r.endDate >= today && daysBetween(today, r.endDate) <= DUE_SOON_DAYS)
+    .map((r) => ({ reservation: r, daysLeft: daysBetween(today, r.endDate) }))
     .sort((a, b) => a.daysLeft - b.daysLeft);
+  const overdue = reservations
+    .filter((r) => r.status === "active" && r.endDate && r.endDate < today)
+    .sort((a, b) => a.endDate.localeCompare(b.endDate));
+
+  const paidLine = (r) => {
+    const paid = paidByReservation[r.id] || 0;
+    return paid > 0 ? ` · zaplaceno ${czk(paid)}` : "";
+  };
+  const resActions = (r, { pay = true, ret = true } = {}) => (
+    <div className="card-foot-actions dash-actions">
+      {pay && (
+        <button className="link-btn" onClick={() => onPayReservation(r.id)}>
+          <Wallet size={14} /> Platba
+        </button>
+      )}
+      {ret && (
+        <button className="link-btn" onClick={() => onReturnReservation(r)}>
+          <Check size={14} /> Vrátit
+        </button>
+      )}
+      <button className="link-btn" onClick={() => onEditReservation(r.id)}>
+        <Pencil size={14} /> Upravit
+      </button>
+    </div>
+  );
   return (
     <div>
       <div className="stat-grid">
@@ -1728,23 +1788,21 @@ function Dashboard({ stats, items, clients, reservations, paymentDueReservations
         <>
           <div className="section-title">Zkontrolovat měsíční platbu ({stats.paymentDue})</div>
           <div className="grid-cards">
-            {paymentDueReservations.map(({ reservation: r, daysSincePayment }) => {
-              const item = items.find((i) => i.id === r.itemId);
-              const client = clients.find((c) => c.id === r.clientId);
-              return (
-                <div className="card" key={r.id}>
-                  <div className="card-row">
-                    <AlertTriangle size={16} color="#8A6D3B" />
-                    <div className="grow">
-                      <div className="card-title">{item?.name || "—"}</div>
-                      <div className="card-sub">
-                        {client?.name} · {daysSincePayment} dní bez zaznamenané platby
-                      </div>
+            {paymentDueReservations.map(({ reservation: r, daysSincePayment }) => (
+              <div className="card" key={r.id}>
+                <div className="card-row card-click" onClick={() => onEditReservation(r.id)}>
+                  <AlertTriangle size={16} color="#8A6D3B" />
+                  <div className="grow">
+                    <div className="card-title">{itemName(r.itemId)}{r.quantity > 1 ? ` ×${r.quantity}` : ""}</div>
+                    <div className="card-sub"><DashClient client={clientOf(r.clientId)} /></div>
+                    <div className="card-sub">
+                      {daysSincePayment} dní bez zaznamenané platby{paidLine(r)}
                     </div>
                   </div>
                 </div>
-              );
-            })}
+                {resActions(r)}
+              </div>
+            ))}
           </div>
         </>
       )}
@@ -1754,32 +1812,32 @@ function Dashboard({ stats, items, clients, reservations, paymentDueReservations
           <div className="section-title">Objednávky k vyřízení ({openOrders.length})</div>
           <div className="grid-cards">
             {openOrders.map((s) => {
-              const client = clients.find((c) => c.id === s.clientId);
-              const days = daysBetween(todayISO(), s.date);
+              const days = daysBetween(today, s.date);
               const when = days < 0 ? `po termínu (${fmtDate(s.date)})` : days === 0 ? "dnes" : days === 1 ? "zítra" : `${fmtDate(s.date)} (za ${days} dní)`;
+              const paid = paidBySale[s.id] || 0;
               return (
                 <div className="card" key={s.id}>
-                  <div className="card-row">
+                  <div className="card-row card-click" onClick={() => onEditSale(s.id)}>
                     <ShoppingBag size={16} color={days < 0 ? "#B5482F" : "#8A6D3B"} />
                     <div className="grow">
                       <div className="card-title">
                         {s.itemName}
                         {s.quantity > 1 ? ` ×${s.quantity}` : ""}
                       </div>
+                      <div className="card-sub"><DashClient client={clientOf(s.clientId)} /></div>
                       <div className="card-sub">
-                        {client?.name || "—"}
-                        {client?.phone && (
-                          <>
-                            {" · "}
-                            <a className="tel-link" href={`tel:${client.phone.replace(/\s/g, "")}`}>{client.phone}</a>
-                          </>
-                        )}
+                        Vyzvednutí: {when} · {czk(s.price)}
+                        {paid > 0 ? ` · zaplaceno ${czk(paid)}` : ""}
                       </div>
-                      <div className="card-sub">Vyzvednutí: {when} · {czk(s.price)}</div>
                       {s.note && <div className="card-note">{s.note}</div>}
                     </div>
                   </div>
-                  <div className="card-foot-actions">
+                  <div className="card-foot-actions dash-actions">
+                    {paid < s.price && (
+                      <button className="link-btn" onClick={() => onPaySale(s.id)}>
+                        <Wallet size={14} /> Platba
+                      </button>
+                    )}
                     <button className="link-btn" onClick={() => onEditSale(s.id)}>
                       <Pencil size={14} /> Upravit
                     </button>
@@ -1801,80 +1859,75 @@ function Dashboard({ stats, items, clients, reservations, paymentDueReservations
         <Empty text="Zatím žádné nevyřízené žádosti ani nezávazné rezervace." />
       ) : (
         <div className="grid-cards">
-          {pendingReservations.map((r) => {
-            const item = items.find((i) => i.id === r.itemId);
-            const client = clients.find((c) => c.id === r.clientId);
-            return (
-              <div className="card" key={r.id}>
-                <div className="card-row">
-                  <div className="grow">
-                    <div className="card-title">{item?.name || "—"}{r.quantity > 1 ? ` ×${r.quantity}` : ""}</div>
-                    <div className="card-sub">
-                      {client?.name} · {client?.phone}
-                    </div>
-                  </div>
-                  <StampBadge status="pending" />
-                </div>
-                <div className="card-line mono">
-                  {fmtDate(r.startDate)} – {fmtDate(r.endDate)} · {czk(r.price)}
-                </div>
-                <div className="card-foot-actions">
-                  <button className="link-btn" onClick={() => onApprove(r.id)}>
-                    <Check size={14} /> Schválit
-                  </button>
-                  <button className="link-btn link-btn-danger" onClick={() => onReject(r.id)}>
-                    Zamítnout
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      <div className="section-title">Vrací se brzy</div>
-      {dueSoonItems.length === 0 ? (
-        <Empty text="Nic se v nejbližších dnech nevrací." />
-      ) : (
-        <div className="grid-cards">
-          {dueSoonItems.map(({ item: it, reservation: res, daysLeft }) => (
-            <div className="card" key={it.id}>
-              <div className="card-row">
-                <AlertTriangle size={16} color="#8A6D3B" />
+          {pendingReservations.map((r) => (
+            <div className="card" key={r.id}>
+              <div className="card-row card-click" onClick={() => onEditReservation(r.id)}>
                 <div className="grow">
-                  <div className="card-title">{it.name}</div>
-                  <div className="card-sub">
-                    {clients.find((c) => c.id === res.clientId)?.name} · vrátit{" "}
-                    {daysLeft === 0 ? "dnes" : daysLeft === 1 ? "zítra" : `za ${daysLeft} dní`} ({fmtDate(res.endDate)})
-                  </div>
+                  <div className="card-title">{itemName(r.itemId)}{r.quantity > 1 ? ` ×${r.quantity}` : ""}</div>
+                  <div className="card-sub"><DashClient client={clientOf(r.clientId)} /></div>
                 </div>
+                <StampBadge status="pending" />
+              </div>
+              <div className="card-line mono">
+                {fmtDate(r.startDate)} – {r.endDate ? fmtDate(r.endDate) : "otevřeno"} · {czk(r.price)}
+              </div>
+              <div className="card-foot-actions dash-actions">
+                <button className="link-btn" onClick={() => onApprove(r.id)}>
+                  <Check size={14} /> Schválit
+                </button>
+                <button className="link-btn" onClick={() => onEditReservation(r.id)}>
+                  <Pencil size={14} /> Upravit
+                </button>
+                <button className="link-btn link-btn-danger" onClick={() => onReject(r.id)}>
+                  Zamítnout
+                </button>
               </div>
             </div>
           ))}
         </div>
       )}
 
-      <div className="section-title">Po termínu vrácení</div>
-      {overdueItems.length === 0 ? (
-        <Empty text="Nic není po termínu. Dobrá práce." />
+      <div className="section-title">Vrací se brzy</div>
+      {dueSoon.length === 0 ? (
+        <Empty text="Nic se v nejbližších dnech nevrací." />
       ) : (
         <div className="grid-cards">
-          {overdueItems.map((it) => {
-            const res = it.activeReservations.find((r) => r.endDate && r.endDate < todayISO()) || it.currentReservation;
-            return (
-              <div className="card" key={it.id}>
-                <div className="card-row">
-                  <AlertTriangle size={16} color="#B5482F" />
-                  <div className="grow">
-                    <div className="card-title">{it.name}</div>
-                    <div className="card-sub">
-                      {clients.find((c) => c.id === res?.clientId)?.name} · mělo být vráceno {fmtDate(res?.endDate)}
-                    </div>
+          {dueSoon.map(({ reservation: r, daysLeft }) => (
+            <div className="card" key={r.id}>
+              <div className="card-row card-click" onClick={() => onEditReservation(r.id)}>
+                <AlertTriangle size={16} color="#8A6D3B" />
+                <div className="grow">
+                  <div className="card-title">{itemName(r.itemId)}{r.quantity > 1 ? ` ×${r.quantity}` : ""}</div>
+                  <div className="card-sub"><DashClient client={clientOf(r.clientId)} /></div>
+                  <div className="card-sub">
+                    vrátit {daysLeft === 0 ? "dnes" : daysLeft === 1 ? "zítra" : `za ${daysLeft} dní`} ({fmtDate(r.endDate)}){paidLine(r)}
                   </div>
                 </div>
               </div>
-            );
-          })}
+              {resActions(r)}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="section-title">Po termínu vrácení</div>
+      {overdue.length === 0 ? (
+        <Empty text="Nic není po termínu. Dobrá práce." />
+      ) : (
+        <div className="grid-cards">
+          {overdue.map((r) => (
+            <div className="card" key={r.id}>
+              <div className="card-row card-click" onClick={() => onEditReservation(r.id)}>
+                <AlertTriangle size={16} color="#B5482F" />
+                <div className="grow">
+                  <div className="card-title">{itemName(r.itemId)}{r.quantity > 1 ? ` ×${r.quantity}` : ""}</div>
+                  <div className="card-sub"><DashClient client={clientOf(r.clientId)} /></div>
+                  <div className="card-sub">mělo být vráceno {fmtDate(r.endDate)}{paidLine(r)}</div>
+                </div>
+              </div>
+              {resActions(r)}
+            </div>
+          ))}
         </div>
       )}
 
@@ -2860,6 +2913,9 @@ export function Style() {
       .link-btn:disabled { color:#B4BEBB; cursor:not-allowed; text-decoration:none; }
       .link-btn-danger { color:#B5482F; }
       .row-actions { display:flex; align-items:center; gap:10px; white-space:nowrap; }
+      .card-click { cursor:pointer; border-radius:8px; }
+      .card-click:hover .card-title { text-decoration:underline; text-decoration-color:#C9BE9C; }
+      .dash-actions { justify-content:flex-start; flex-wrap:wrap; gap:16px; }
       .row-actions.sale-actions { flex-wrap:wrap; row-gap:6px; max-width:200px; }
       .table-subtext { font-size:11px; color:#8C8470; margin-top:2px; }
       .tel-link { color:inherit; text-decoration:underline; text-decoration-color:#C9BE9C; }
