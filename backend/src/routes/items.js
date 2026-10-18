@@ -8,19 +8,20 @@ const router = Router();
 router.post(
   "/",
   asyncHandler(async (req, res) => {
-    const { name, category, quantityTotal, dailyRate, priceTiers } = req.body || {};
+    const { name, category, quantityTotal, dailyRate, priceTiers, monthlyRate } = req.body || {};
     if (!name || !name.trim() || !(Number(dailyRate) > 0)) {
       return res.status(400).json({ error: "Název a cena jsou povinné." });
     }
     const { rows } = await pool.query(
-      `INSERT INTO items (name, category, quantity_total, daily_rate, price_tiers, service_flag)
-       VALUES ($1, $2, $3, $4, $5, false) RETURNING *`,
+      `INSERT INTO items (name, category, quantity_total, daily_rate, price_tiers, service_flag, monthly_rate)
+       VALUES ($1, $2, $3, $4, $5, false, $6) RETURNING *`,
       [
         name.trim(),
         category || null,
         Math.max(1, Number(quantityTotal) || 1),
         Number(dailyRate) || 0,
         JSON.stringify(priceTiers && priceTiers.length ? priceTiers : [{ days: 1, rate: Number(dailyRate) || 0 }]),
+        Number(monthlyRate) > 0 ? Number(monthlyRate) : null,
       ]
     );
     res.status(201).json(mapItem(rows[0]));
@@ -45,11 +46,13 @@ router.put(
     const dailyRate = patch.dailyRate !== undefined ? Number(patch.dailyRate) || 0 : existing.daily_rate;
     const priceTiers = patch.priceTiers !== undefined ? patch.priceTiers : existing.price_tiers;
     const serviceFlag = patch.serviceFlag !== undefined ? !!patch.serviceFlag : existing.service_flag;
+    const monthlyRate =
+      patch.monthlyRate !== undefined ? (Number(patch.monthlyRate) > 0 ? Number(patch.monthlyRate) : null) : existing.monthly_rate;
 
     const { rows } = await pool.query(
-      `UPDATE items SET name = $1, category = $2, quantity_total = $3, daily_rate = $4, price_tiers = $5, service_flag = $6
-       WHERE id = $7 RETURNING *`,
-      [name, category, quantityTotal, dailyRate, JSON.stringify(priceTiers), serviceFlag, id]
+      `UPDATE items SET name = $1, category = $2, quantity_total = $3, daily_rate = $4, price_tiers = $5, service_flag = $6,
+       monthly_rate = $7 WHERE id = $8 RETURNING *`,
+      [name, category, quantityTotal, dailyRate, JSON.stringify(priceTiers), serviceFlag, monthlyRate, id]
     );
     res.json(mapItem(rows[0]));
   })

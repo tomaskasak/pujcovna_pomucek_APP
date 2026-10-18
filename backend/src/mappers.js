@@ -18,6 +18,7 @@ export function mapItem(row) {
     category: row.category || "",
     quantityTotal: row.quantity_total,
     dailyRate: row.daily_rate,
+    monthlyRate: row.monthly_rate || null,
     priceTiers: row.price_tiers || [],
     serviceFlag: row.service_flag,
   };

@@ -2,7 +2,7 @@ import { Router } from "express";
 import { pool } from "../db.js";
 import { asyncHandler } from "../asyncHandler.js";
 import { mapReservation, mapService } from "../mappers.js";
-import { effectiveRate, daysBetween } from "../pricing.js";
+import { rentalPrice } from "../pricing.js";
 import { notifyNewReservationRequest } from "../mailer.js";
 
 const router = Router();
@@ -52,6 +52,7 @@ router.get(
           name: it.name,
           category: it.category || "",
           dailyRate: it.daily_rate,
+          monthlyRate: it.monthly_rate || null,
           priceTiers: it.price_tiers || [],
           quantityTotal: it.quantity_total,
           availableQty,
@@ -129,9 +130,12 @@ router.post(
     // obsluha ji doplní/upraví při schválení, až bude znát skutečnou dobu
     let price = 0;
     if (endDate) {
-      const days = Math.max(1, daysBetween(startDate, endDate) + 1);
-      const rate = effectiveRate(item.price_tiers, item.daily_rate, days);
-      price = days * qty * rate;
+      price = rentalPrice(
+        { priceTiers: item.price_tiers, dailyRate: item.daily_rate, monthlyRate: item.monthly_rate },
+        startDate,
+        endDate,
+        qty
+      );
     }
 
     const { rows } = await pool.query(

@@ -124,6 +124,10 @@ ALTER TABLE payments ADD COLUMN IF NOT EXISTS sale_id UUID REFERENCES sales(id) 
 -- kus z půjčovny je do potvrzení blokovaný, ale ze skladu ještě neubyl;
 -- completed = skutečně prodáno; cancelled = objednávka zrušena
 ALTER TABLE sales ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'completed';
+
+-- Pevná měsíční sazba (např. postele 1500 Kč/měsíc) — u výpůjček od 28 dní se
+-- počítá každý započatý měsíc místo denní sazby. NULL = jen denní sazby.
+ALTER TABLE items ADD COLUMN IF NOT EXISTS monthly_rate INTEGER;
 ALTER TABLE sales DROP CONSTRAINT IF EXISTS sales_status_check;
 ALTER TABLE sales ADD CONSTRAINT sales_status_check CHECK (status IN ('ordered', 'completed', 'cancelled'));
 

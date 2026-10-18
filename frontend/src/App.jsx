@@ -22,6 +22,45 @@ export function effectiveRate(item, days) {
   }
   return rate;
 }
+// Od kolika dní se u pomůcky s měsíční sazbou počítá po měsících.
+export const MONTHLY_FROM_DAYS = 28;
+function addMonthsISO(startISO, k) {
+  const [y, m, d] = startISO.split("-").map(Number);
+  const total = m - 1 + k;
+  const ny = y + Math.floor(total / 12);
+  const nm = total % 12;
+  const last = new Date(Date.UTC(ny, nm + 1, 0)).getUTCDate();
+  return `${ny}-${String(nm + 1).padStart(2, "0")}-${String(Math.min(d, last)).padStart(2, "0")}`;
+}
+// počet započatých měsíců výpůjčky (konec včetně): 1. 10.–31. 10. = 1, 1. 10.–1. 11. = 2
+export function startedMonths(startISO, endISO) {
+  let n = 0;
+  while (addMonthsISO(startISO, n + 1) <= endISO) n++;
+  return n + 1;
+}
+const monthsWord = (n) => (n === 1 ? "měsíc" : n < 5 ? "měsíce" : "měsíců");
+// cena výpůjčky: s měsíční sazbou od 28 dní každý započatý měsíc, jinak dny × denní sazba
+export function calcRentalPrice(item, startISO, endISO, quantity = 1) {
+  const days = Math.max(1, daysBetween(startISO, endISO) + 1);
+  if (item.monthlyRate > 0 && days >= MONTHLY_FROM_DAYS) {
+    const months = startedMonths(startISO, endISO);
+    return {
+      price: months * quantity * item.monthlyRate,
+      days,
+      rate: item.monthlyRate,
+      monthly: true,
+      label: `${months} ${monthsWord(months)} × ${quantity} ks × ${czk(item.monthlyRate)}/měsíc`,
+    };
+  }
+  const rate = effectiveRate(item, days);
+  return {
+    price: days * quantity * rate,
+    days,
+    rate,
+    monthly: false,
+    label: `${days} ${days === 1 ? "den" : days < 5 ? "dny" : "dní"} × ${quantity} ks × ${czk(rate)}/den`,
+  };
+}
 export const todayISO = () => new Date().toISOString().slice(0, 10);
 export const fmtDate = (iso) => {
   if (!iso) return "—";
@@ -929,6 +968,7 @@ export default function App() {
                   </div>
                   <div className="card-line mono">
                     {czk(it.dailyRate)} / den
+                    {it.monthlyRate ? ` · ${czk(it.monthlyRate)} / měsíc` : ""}
                     {it.priceTiers && it.priceTiers.length > 1 && (
                       <span className="tier-hint"> · {it.priceTiers.slice(1).map((t) => `${t.days}+ dní: ${t.rate} Kč`).join(", ")}</span>
                     )}
@@ -1133,7 +1173,7 @@ export default function App() {
                       // u flexibilní (dosud neukončené) výpůjčky appka průběžně počítá odhad ceny k dnešnímu dni
                       const daysSoFar = openEndedActive ? Math.max(1, daysBetween(r.startDate, todayISO()) + 1) : null;
                       const estimatedPrice =
-                        openEndedActive && item ? daysSoFar * (r.quantity || 1) * effectiveRate(item, daysSoFar) : null;
+                        openEndedActive && item ? calcRentalPrice(item, r.startDate, todayISO(), r.quantity || 1).price : null;
                       return (
                         <tr key={r.id}>
                           <td>
@@ -1493,10 +1533,11 @@ export default function App() {
             // ukazuje živě dopočítávaný odhad ceny k dnešnímu dni, ne uloženou
             // (starou) cenu — platba tu musí počítat se stejným číslem
             const openEndedActive = r.status === "active" && !r.endDate;
-            const daysSoFar = openEndedActive ? Math.max(1, daysBetween(r.startDate, todayISO()) + 1) : null;
             const price =
-              openEndedActive && item ? daysSoFar * (r.quantity || 1) * effectiveRate(item, daysSoFar) : r.price;
+              openEndedActive && item ? calcRentalPrice(item, r.startDate, todayISO(), r.quantity || 1).price : r.price;
             return {
+              // dlouhodobá výpůjčka s měsíční sazbou se platí po měsících — předvyplnit jeden měsíc
+              suggestedAmount: openEndedActive && item?.monthlyRate ? item.monthlyRate * (r.quantity || 1) : undefined,
               id: r.id,
               clientId: r.clientId,
               price,
@@ -1512,8 +1553,7 @@ export default function App() {
             if (ok && r && r.paymentStatus !== "zaplaceno") {
               const item = data.items.find((i) => i.id === r.itemId);
               const openEndedActive = r.status === "active" && !r.endDate;
-              const daysSoFar = openEndedActive ? Math.max(1, daysBetween(r.startDate, todayISO()) + 1) : null;
-              const price = openEndedActive && item ? daysSoFar * (r.quantity || 1) * effectiveRate(item, daysSoFar) : r.price;
+              const price = openEndedActive && item ? calcRentalPrice(item, r.startDate, todayISO(), r.quantity || 1).price : r.price;
               const paid = (paidByReservation[r.id] || 0) + Number(p.amount || 0);
               const next = paid >= price ? "zaplaceno" : "zaloha";
               if (next !== r.paymentStatus) await setPaymentStatus(r.id, next);
@@ -1651,6 +1691,7 @@ export function PublicStockPage({ items, standalone, onReserve }) {
                 <div className="card-title">{it.name}</div>
                 <div className="card-line mono">
                   {czk(it.dailyRate)} / den
+                    {it.monthlyRate ? ` · ${czk(it.monthlyRate)} / měsíc` : ""}
                   {it.priceTiers && it.priceTiers.length > 1 && (
                     <span className="tier-hint"> · {it.priceTiers.slice(1).map((t) => `${t.days}+ dní: ${t.rate} Kč`).join(", ")}</span>
                   )}
@@ -1983,6 +2024,7 @@ function ItemModal({ onClose, onSave, initial }) {
   const [name, setName] = useState(initial?.name || "");
   const [category, setCategory] = useState(initial?.category || "");
   const [quantityTotal, setQuantityTotal] = useState(String(initial?.quantityTotal ?? "1"));
+  const [monthlyRate, setMonthlyRate] = useState(initial?.monthlyRate ? String(initial.monthlyRate) : "");
   const [tiers, setTiers] = useState(
     initial?.priceTiers && initial.priceTiers.length
       ? initial.priceTiers.map((t) => ({ days: String(t.days), rate: String(t.rate) }))
@@ -2030,6 +2072,13 @@ function ItemModal({ onClose, onSave, initial }) {
         <button className="link-btn" onClick={addTier}>+ Přidat zvýhodněnou sazbu od X dní</button>
       </div>
 
+      <Field label="Měsíční sazba (Kč / měsíc)">
+        <input inputMode="numeric" value={monthlyRate} onChange={(e) => setMonthlyRate(e.target.value.replace(/\D/g, ""))} placeholder="např. 1500 (nepovinné)" />
+      </Field>
+      <div className="card-sub" style={{ marginTop: -6, marginBottom: 12 }}>
+        U výpůjčky od {MONTHLY_FROM_DAYS} dní se pak počítá každý započatý měsíc místo denní sazby.
+      </div>
+
       <div className="modal-actions">
         <button
           className="btn btn-primary"
@@ -2043,6 +2092,7 @@ function ItemModal({ onClose, onSave, initial }) {
               category,
               quantityTotal: Math.max(1, Number(quantityTotal) || 1),
               dailyRate: cleanTiers[0]?.rate || baseRate,
+              monthlyRate: Number(monthlyRate) || null,
               priceTiers: cleanTiers.length ? cleanTiers : [{ days: 1, rate: baseRate }],
             });
           }}
@@ -2091,12 +2141,13 @@ function ReservationModal({ clients, items, onClose, onSave }) {
 
   const cartLines = cart.map((entry) => {
     const item = rentable.find((i) => i.id === entry.itemId);
-    const rate = item ? effectiveRate(item, days) : 0;
-    const computedPrice = item ? days * entry.quantity * rate : 0;
+    const calc = item ? calcRentalPrice(item, startDate, openEnded ? todayISO() : endDate || startDate, entry.quantity) : null;
+    const rate = calc ? calc.rate : 0;
+    const computedPrice = calc ? calc.price : 0;
     const price = entry.priceOverride !== null ? Number(entry.priceOverride) || 0 : computedPrice;
     const notEnoughNow = item ? entry.quantity > item.availableQty : false;
     const overQuantity = item ? entry.quantity > item.quantityTotal : false;
-    return { entry, item, rate, computedPrice, price, notEnoughNow, overQuantity };
+    return { entry, item, rate, calc, computedPrice, price, notEnoughNow, overQuantity };
   });
   const totalPrice = cartLines.reduce((s, l) => s + l.price, 0);
 
@@ -2165,13 +2216,16 @@ function ReservationModal({ clients, items, onClose, onSave }) {
             <Empty text="Zatím žádná pomůcka v košíku — přidej aspoň jednu." />
           ) : (
             <div className="cart-list">
-              {cartLines.map(({ entry, item, rate, computedPrice, price, notEnoughNow, overQuantity }) => (
+              {cartLines.map(({ entry, item, rate, calc, computedPrice, price, notEnoughNow, overQuantity }) => (
                 <div className="cart-item" key={entry.itemId}>
                   <div className="cart-item-head">
                     <div className="grow">
                       <strong>{item.name}</strong> × {entry.quantity}
-                      {item.priceTiers && item.priceTiers.length > 1 && (
-                        <span className="tier-hint"> · sazba pro {days}+ dní: {czk(rate)}/den</span>
+                      {calc?.monthly ? (
+                        <span className="tier-hint"> · {calc.label}</span>
+                      ) : (
+                        item.priceTiers &&
+                        item.priceTiers.length > 1 && <span className="tier-hint"> · sazba pro {days}+ dní: {czk(rate)}/den</span>
                       )}
                     </div>
                     <button type="button" className="icon-btn danger" onClick={() => removeFromCart(entry.itemId)}>
@@ -2267,9 +2321,8 @@ function EditReservationModal({ reservation, item, client, onClose, onSave }) {
   const [priceTouched, setPriceTouched] = useState(false);
 
   const qtyNum = Math.max(1, Number(quantity) || 1);
-  const days = Math.max(1, daysBetween(startDate, openEnded ? todayISO() : endDate) + 1);
-  const rate = item ? effectiveRate(item, days) : 0;
-  const computedPrice = item ? days * qtyNum * rate : reservation?.price || 0;
+  const calc = item ? calcRentalPrice(item, startDate, openEnded ? todayISO() : endDate || startDate, qtyNum) : null;
+  const computedPrice = calc ? calc.price : reservation?.price || 0;
 
   useEffect(() => {
     if (openEnded && !priceTouched) {
@@ -2324,7 +2377,7 @@ function EditReservationModal({ reservation, item, client, onClose, onSave }) {
         )}
         {item && (
           <div className="price-row">
-            dle ceníku: {days} {days === 1 ? "den" : days < 5 ? "dny" : "dní"} × {qtyNum} ks × {czk(rate)}/den = {czk(computedPrice)}
+            dle ceníku: {calc.label} = {czk(computedPrice)}
           </div>
         )}
         <Field label="Cena k fakturaci (Kč)">
@@ -2373,9 +2426,8 @@ function ReturnReservationModal({ reservation, item, client, alreadyPaid, onClos
   const [priceInput, setPriceInput] = useState("0");
   const [priceTouched, setPriceTouched] = useState(false);
 
-  const days = Math.max(1, daysBetween(reservation?.startDate || todayISO(), endDate) + 1);
-  const rate = item ? effectiveRate(item, days) : 0;
-  const computedPrice = item ? days * (reservation?.quantity || 1) * rate : reservation?.price || 0;
+  const calc = item ? calcRentalPrice(item, reservation?.startDate || todayISO(), endDate, reservation?.quantity || 1) : null;
+  const computedPrice = calc ? calc.price : reservation?.price || 0;
 
   // dokud cenu nikdo ručně nezměnil, ať sleduje přepočet podle zvoleného data vrácení
   useEffect(() => {
@@ -2400,7 +2452,7 @@ function ReturnReservationModal({ reservation, item, client, alreadyPaid, onClos
       <div className="price-box">
         {item && (
           <div className="price-row">
-            dle ceníku: {days} {days === 1 ? "den" : days < 5 ? "dny" : "dní"} × {reservation.quantity || 1} ks × {czk(rate)}/den = {czk(computedPrice)}
+            dle ceníku: {calc.label} = {czk(computedPrice)}
           </div>
         )}
         <Field label="Cena k fakturaci (Kč)">
@@ -2471,7 +2523,7 @@ function SaleModal({ clients, item: fixedItem, items = [], reservation, clientBy
   const openEnded = fromRental && !reservation.endDate;
   const rentalDays = openEnded ? Math.max(1, daysBetween(reservation.startDate, date) + 1) : 0;
   const rentalComputed =
-    openEnded && item ? rentalDays * (reservation.quantity || 1) * effectiveRate(item, rentalDays) : 0;
+    openEnded && item ? calcRentalPrice(item, reservation.startDate, date, reservation.quantity || 1).price : 0;
   const [rentalPrice, setRentalPrice] = useState(null);
   const rentalFinal = rentalPrice !== null ? Number(rentalPrice) || 0 : rentalComputed;
 
@@ -2724,7 +2776,11 @@ function PaymentModal({ clients, reservation, initial, clientById, onClose, onSa
   const [clientId, setClientId] = useState(initial?.clientId || reservation?.clientId || clients[0]?.id || "");
   const [date, setDate] = useState(initial?.date || todayISO());
   const [amount, setAmount] = useState(
-    initial ? String(initial.amount) : reservation ? String(remaining || reservation.price || "") : ""
+    initial
+      ? String(initial.amount)
+      : reservation
+        ? String(reservation.suggestedAmount || remaining || reservation.price || "")
+        : ""
   );
   const [method, setMethod] = useState(initial?.method || "Hotově");
   const [variableSymbol, setVariableSymbol] = useState(initial?.variableSymbol || "");

@@ -9,8 +9,7 @@ import {
   Field,
   czk,
   todayISO,
-  daysBetween,
-  effectiveRate,
+  calcRentalPrice,
 } from "./App.jsx";
 
 // Samostatná, nepřihlášená stránka s dostupností pomůcek — určená pro klienty
@@ -244,9 +243,8 @@ function ReservationRequestModal({ item, onClose, onSubmitted }) {
   const [done, setDone] = useState(false);
 
   const qtyNum = Math.max(1, Number(quantity) || 1);
-  const days = Math.max(1, daysBetween(startDate, openEnded ? startDate : endDate) + 1);
-  const rate = effectiveRate(item, days);
-  const price = days * qtyNum * rate;
+  const calc = calcRentalPrice(item, startDate, openEnded ? startDate : endDate || startDate, qtyNum);
+  const price = calc.price;
   const notAvailableNow = qtyNum > item.availableQty;
 
   const canSubmit =
@@ -348,7 +346,7 @@ function ReservationRequestModal({ item, onClose, onSubmitted }) {
           ) : (
             <>
               <div className="price-row">
-                {days} {days === 1 ? "den" : days < 5 ? "dny" : "dní"} × {qtyNum} ks × {czk(rate)}/den
+                {calc.label}
               </div>
               <div className="price-total">
                 Orientační cena: <span className="mono">{czk(price)}</span>
