@@ -1508,6 +1508,16 @@ export default function App() {
           onClose={() => setModal(null)}
           onSave={async (p) => {
             const ok = modal.editId ? await updatePayment(modal.editId, p) : await addPayment(p);
+            const r = !modal.editId && p.reservationId && data.reservations.find((x) => x.id === p.reservationId);
+            if (ok && r && r.paymentStatus !== "zaplaceno") {
+              const item = data.items.find((i) => i.id === r.itemId);
+              const openEndedActive = r.status === "active" && !r.endDate;
+              const daysSoFar = openEndedActive ? Math.max(1, daysBetween(r.startDate, todayISO()) + 1) : null;
+              const price = openEndedActive && item ? daysSoFar * (r.quantity || 1) * effectiveRate(item, daysSoFar) : r.price;
+              const paid = (paidByReservation[r.id] || 0) + Number(p.amount || 0);
+              const next = paid >= price ? "zaplaceno" : "zaloha";
+              if (next !== r.paymentStatus) await setPaymentStatus(r.id, next);
+            }
             if (ok) {
               setModal(null);
               showToast(modal.editId ? "Platba upravena" : "Platba zaznamenána");
@@ -2748,11 +2758,9 @@ function PaymentModal({ clients, reservation, initial, clientById, onClose, onSa
               </select>
             </Field>
           )}
-          {isEdit && (
-            <Field label="Datum">
-              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-            </Field>
-          )}
+          <Field label="Datum platby">
+            <input type="date" value={date} max={todayISO()} onChange={(e) => setDate(e.target.value)} />
+          </Field>
           <div className="field-row">
             <Field label="Částka (Kč) *">
               <input inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value.replace(/\D/g, ""))} placeholder="300" />
@@ -2782,7 +2790,7 @@ function PaymentModal({ clients, reservation, initial, clientById, onClose, onSa
                   clientId,
                   reservationId: reservation && reservation.kind !== "sale" ? reservation.id : undefined,
                   saleId: reservation?.kind === "sale" ? reservation.id : undefined,
-                  date: isEdit ? date : undefined,
+                  date,
                   amount: Number(amount),
                   method,
                   variableSymbol,
