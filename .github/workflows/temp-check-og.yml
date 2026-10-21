@@ -1,0 +1,14 @@
+name: temp-check-og
+on: push
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          UA="facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)"
+          for i in $(seq 1 10); do
+            if curl -s --max-time 60 -A "$UA" https://pujcovna.reharentkrkonose.cz/verejny-prehled | grep -q 'og:image'; then echo "og tagy nasazeny (pokus $i)"; break; fi
+            echo "pokus $i: zatím stará verze"; sleep 60
+          done
+          curl -s --max-time 60 -A "$UA" https://pujcovna.reharentkrkonose.cz/verejny-prehled | grep -o '<meta property="og:[^>]*>'
+          curl -s -o /dev/null --max-time 60 -A "$UA" -w "og-image: HTTP %{http_code}, %{content_type}, %{size_download} B, %{time_total}s\n" https://pujcovna.reharentkrkonose.cz/og-image.png
