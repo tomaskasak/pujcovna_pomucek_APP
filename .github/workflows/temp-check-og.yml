@@ -1,4 +1,4 @@
-name: temp-check-og
+name: temp-check-og2
 on: push
 jobs:
   check:
@@ -11,4 +11,4 @@ jobs:
             echo "pokus $i: zatím stará verze"; sleep 60
           done
           curl -s --max-time 60 -A "$UA" https://pujcovna.reharentkrkonose.cz/verejny-prehled | grep -o '<meta property="og:[^>]*>'
-          curl -s -o /dev/null --max-time 60 -A "$UA" -w "og-image: HTTP %{http_code}, %{content_type}, %{size_download} B, %{time_total}s\n" https://pujcovna.reharentkrkonose.cz/og-image.png
+          curl -s -o /dev/null --max-time 60 -A "$UA" -w "og-image: HTTP %{http_code}, %{content_type}, %{size_download} B, %{time_total}s\n" https://pujcovna.reharentkrkonose.cz/og-reharent.png
