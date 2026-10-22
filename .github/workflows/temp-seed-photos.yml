@@ -1,0 +1,14 @@
+name: TEMP seed item photos
+on:
+  push:
+    branches: [main]
+    paths: ["scripts/photos/**", "scripts/seed-photos.py"]
+jobs:
+  seed:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - env:
+          APP_URL: https://pujcovna.reharentkrkonose.cz
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: python3 scripts/seed-photos.py
