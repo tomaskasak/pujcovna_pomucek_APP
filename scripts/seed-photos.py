@@ -2,7 +2,13 @@
 import base64, json, os, sys, time, urllib.error, urllib.request
 
 PHOTOS = [
-    ("elektricky-vozik.webp", "Elektrický vozík"),
+    ("francouzske-hole.webp", "Francouzské hole"),
+    ("berle.webp", "Berle"),
+    ("matrace-k-posteli.webp", "Antidekubitní matrace (k posteli)"),
+    ("vysoke-choditko.webp", "Vysoké chodítko"),
+    ("matrace-nafukovaci.webp", "Antidekubitní matrace (nafukovací s kompresorem)"),
+    ("hrazda.webp", "Hrazda k posteli"),
+    ("motodlaha.webp", "Motodlaha"),
 ]
 
 app_url, secret = os.environ["APP_URL"], os.environ["CRON_SECRET"]
