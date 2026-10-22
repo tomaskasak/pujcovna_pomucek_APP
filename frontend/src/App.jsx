@@ -1690,7 +1690,11 @@ export function PublicStockPage({ items, standalone, onReserve }) {
             {byCategory[cat].map((it) => (
               <div className="card public-card" key={it.id}>
                 {it.photoIds && it.photoIds.length > 0 && (
-                  <img className="public-card-photo" src={`/api/public/photo/${it.photoIds[0]}`} alt={it.name} />
+                  <div className="public-card-photos">
+                    {it.photoIds.slice(0, 3).map((photoId) => (
+                      <img key={photoId} src={`/api/public/photo/${photoId}`} alt={it.name} />
+                    ))}
+                  </div>
                 )}
                 <div className="card-title">{it.name}</div>
                 <div className="card-line mono">
@@ -3041,7 +3045,8 @@ export function Style() {
 
       .photo-row { display:flex; gap:6px; flex-wrap:wrap; margin-top:10px; }
       .photo-thumb { position:relative; width:56px; height:56px; border-radius:8px; overflow:hidden; border:1px solid #E8E0C8; flex-shrink:0; }
-      .photo-thumb img { width:100%; height:100%; object-fit:cover; display:block; }
+      .photo-thumb { background:#F7F2E4; }
+      .photo-thumb img { width:100%; height:100%; object-fit:contain; padding:3px; display:block; }
       .photo-thumb-remove {
         position:absolute; top:2px; right:2px; width:16px; height:16px; border-radius:50%;
         background:rgba(32,40,31,0.75); color:#fff; border:none; display:flex; align-items:center; justify-content:center; cursor:pointer; padding:0;
@@ -3121,7 +3126,8 @@ export function Style() {
       .public-section { margin-bottom: 26px; }
       .public-cat-title { font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:#8C8470; margin-bottom:10px; font-weight:600; }
       .public-card { display:flex; flex-direction:column; gap:8px; }
-      .public-card-photo { width:100%; height:140px; object-fit:contain; object-position:center; background:#F7F2E4; border-radius:8px; margin-bottom:2px; }
+      .public-card-photos { display:flex; gap:6px; height:170px; padding:12px; background:#F7F2E4; border-radius:8px; margin-bottom:2px; }
+      .public-card-photos img { flex:1 1 0; min-width:0; height:100%; object-fit:contain; object-position:center; }
       .public-ok { background:#EAF4EE; color:#3F8D5E; border-color:#CDE7D8; align-self:flex-start; }
       .public-reserve-btn { margin-top:2px; }
       .reservation-success { text-align:center; padding: 10px 4px 4px; }
