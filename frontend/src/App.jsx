@@ -92,8 +92,12 @@ function resizeImageFile(file, maxDim = 1200, quality = 0.82) {
         canvas.width = width;
         canvas.height = height;
         canvas.getContext("2d").drawImage(img, 0, 0, width, height);
-        const dataUrl = canvas.toDataURL("image/jpeg", quality);
-        resolve({ data: dataUrl.split(",")[1], contentType: "image/jpeg" });
+        // PNG/WebP může mít průhledné pozadí (vyříznutá pomůcka) — JPEG by ho zčernal.
+        // WebP průhlednost zachová a je malé; prohlížeč bez WebP vrátí PNG.
+        const mayHaveAlpha = /image\/(png|webp|gif)/.test(file.type);
+        const dataUrl = mayHaveAlpha ? canvas.toDataURL("image/webp", quality) : canvas.toDataURL("image/jpeg", quality);
+        const contentType = dataUrl.slice(5, dataUrl.indexOf(";"));
+        resolve({ data: dataUrl.split(",")[1], contentType });
       };
       img.onerror = () => reject(new Error("Obrázek se nepodařilo načíst."));
       img.src = e.target.result;
