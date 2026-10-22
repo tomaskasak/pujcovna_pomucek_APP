@@ -1,0 +1,16 @@
+name: temp-list-photos
+on: push
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          curl -s --max-time 120 https://pujcovna.reharentkrkonose.cz/api/public/items > items.json
+          python3 - <<'PY'
+          import json
+          items = json.load(open("items.json"))
+          print("CELKEM:", len(items))
+          for i in sorted(items, key=lambda x: (x.get("category") or "", x["name"])):
+              n = len(i.get("photoIds") or [])
+              print(("BEZ FOTKY | " if n == 0 else f"{n} fotka   | ") + (i.get("category") or "-") + " | " + i["name"])
+          PY
