@@ -1,0 +1,12 @@
+name: temp-check-og5
+on: push
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          for i in $(seq 1 15); do
+            if curl -s --max-time 90 https://pujcovna.reharentkrkonose.cz/verejny-prehled | grep -q 'og-reharent-2.png'; then echo "nasazeno (pokus $i)"; break; fi
+            echo "pokus $i: zatím stará verze"; sleep 60
+          done
+          curl -s -o /dev/null --max-time 90 -w "og-reharent-2.png: HTTP %{http_code} %{content_type} %{size_download}B\n" "https://pujcovna.reharentkrkonose.cz/og-reharent-2.png"
