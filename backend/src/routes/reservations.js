@@ -9,7 +9,7 @@ const router = Router();
 router.post(
   "/",
   asyncHandler(async (req, res) => {
-    const { clientId, itemId, quantity, startDate, endDate, deposit, price, nonBinding } = req.body || {};
+    const { clientId, itemId, quantity, startDate, endDate, deposit, price, nonBinding, pendingOnly } = req.body || {};
     if (!clientId || !itemId || !startDate) {
       return res.status(400).json({ error: "Chybí povinné údaje výpůjčky." });
     }
@@ -31,10 +31,11 @@ router.post(
     // Pomůcka teď není k dispozici, ale klient s tím počítá (chce si počkat) — s
     // nonBinding se místo blokování založí jako nezávazná rezervace (status
     // 'pending'), kterou obsluha "schválí" (přepne na aktivní), až se pomůcka uvolní.
-    if (qty > availableQty && !nonBinding) {
+    if (qty > availableQty && !nonBinding && !pendingOnly) {
       return res.status(409).json({ error: `K dispozici je jen ${availableQty} ks.` });
     }
-    const status = qty > availableQty ? "pending" : "active";
+    // pendingOnly = obsluha zakládá jen nezávaznou rezervaci (klient ještě nepotvrdil)
+    const status = pendingOnly || qty > availableQty ? "pending" : "active";
 
     const { rows } = await pool.query(
       `INSERT INTO reservations (client_id, item_id, quantity, start_date, end_date, deposit, price, status, payment_status)
