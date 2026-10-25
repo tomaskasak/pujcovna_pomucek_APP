@@ -1408,7 +1408,17 @@ export default function App() {
           clients={data.clients}
           items={itemsWithStatus.filter((i) => i.status !== "service")}
           onClose={() => setModal(null)}
-          onSave={async (list) => {
+          onSave={async (list, newClient) => {
+            if (newClient) {
+              try {
+                const created = await api.createClient(newClient);
+                setData((d) => ({ ...d, clients: [...d.clients, created] }));
+                list = list.map((r) => ({ ...r, clientId: created.id }));
+              } catch (e) {
+                showToast(e.message);
+                return;
+              }
+            }
             const results = [];
             for (const r of list) {
               results.push(await addReservation(r));
@@ -1422,13 +1432,13 @@ export default function App() {
               } else if (list.length > 1) {
                 showToast(
                   pendingCount > 0
-                    ? `Vytvořeno ${createdCount} výpůjček (${pendingCount}× nezávazně — schval, až bude pomůcka volná)`
+                    ? `Vytvořeno ${createdCount} (${pendingCount}× nezávazná rezervace — najdeš ji v Přehledu mezi žádostmi)`
                     : `Vytvořeno ${createdCount} výpůjček`
                 );
               } else {
                 showToast(
                   pendingCount > 0
-                    ? "Nezávazná rezervace vytvořena — schval ji, až bude pomůcka volná"
+                    ? "Nezávazná rezervace vytvořena — najdeš ji v Přehledu, Schválit až si klient pomůcku vezme"
                     : "Výpůjčka vytvořena"
                 );
               }
@@ -2112,9 +2122,20 @@ function ItemModal({ onClose, onSave, initial }) {
   );
 }
 
+const NEW_CLIENT = "__new__";
+
 function ReservationModal({ clients, items, onClose, onSave }) {
   const rentable = items.filter((i) => !i.serviceFlag);
-  const [clientId, setClientId] = useState(clients[0]?.id || "");
+  const [clientId, setClientId] = useState(clients[0]?.id || NEW_CLIENT);
+  // nového klienta jde založit rovnou tady, bez přepínání do záložky Klienti
+  const isNewClient = clientId === NEW_CLIENT || clients.length === 0;
+  const [newClient, setNewClient] = useState({ name: "", phone: "", address: "" });
+  const phoneDigits = newClient.phone.replace(/\D/g, "");
+  const samePhoneClient =
+    isNewClient && phoneDigits.length >= 6 ? clients.find((c) => (c.phone || "").replace(/\D/g, "") === phoneDigits) : null;
+  // klient pomůcku zatím jen zvažuje / chce ji až později — nic se nezablokuje,
+  // uloží se jako "čeká na schválení" a výpůjčkou se stane až po Schválit
+  const [pendingOnly, setPendingOnly] = useState(false);
   const [startDate, setStartDate] = useState(todayISO());
   const [endDate, setEndDate] = useState(todayISO());
   // klient často předem neví, kdy pomůcku vrátí — pak se datum "Do" nevyplňuje
@@ -2160,25 +2181,51 @@ function ReservationModal({ clients, items, onClose, onSave }) {
   const totalPrice = cartLines.reduce((s, l) => s + l.price, 0);
 
   const canSave =
-    clientId &&
+    (isNewClient ? newClient.name.trim() : clientId) &&
     cart.length > 0 &&
     startDate &&
     (openEnded || (endDate && endDate >= startDate)) &&
-    cartLines.every((l) => l.item && !l.overQuantity && (!l.notEnoughNow || l.entry.nonBindingConfirmed));
+    cartLines.every((l) => l.item && !l.overQuantity && (pendingOnly || !l.notEnoughNow || l.entry.nonBindingConfirmed));
 
   return (
-    <Modal title="Nová výpůjčka" onClose={onClose}>
-      {clients.length === 0 || rentable.length === 0 ? (
-        <div className="empty">
-          {clients.length === 0 ? "Nejprve přidejte klienta." : "Zatím nemáte žádné pomůcky."}
-        </div>
+    <Modal title={pendingOnly ? "Nová nezávazná rezervace" : "Nová výpůjčka"} onClose={onClose}>
+      {rentable.length === 0 ? (
+        <div className="empty">Zatím nemáte žádné pomůcky.</div>
       ) : (
         <>
           <Field label="Klient *">
-            <select value={clientId} onChange={(e) => setClientId(e.target.value)}>
+            <select value={isNewClient ? NEW_CLIENT : clientId} onChange={(e) => setClientId(e.target.value)}>
+              <option value={NEW_CLIENT}>+ Nový klient…</option>
               {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </Field>
+          {isNewClient && (
+            <div className="new-client-box">
+              <div className="field-row">
+                <Field label="Jméno a příjmení *">
+                  <input value={newClient.name} onChange={(e) => setNewClient({ ...newClient, name: e.target.value })} placeholder="Jan Novák" />
+                </Field>
+                <Field label="Telefon">
+                  <input inputMode="tel" value={newClient.phone} onChange={(e) => setNewClient({ ...newClient, phone: e.target.value })} placeholder="603 123 456" />
+                </Field>
+              </div>
+              <Field label="Adresa">
+                <input value={newClient.address} onChange={(e) => setNewClient({ ...newClient, address: e.target.value })} placeholder="Ulice 12, Vrchlabí" />
+              </Field>
+              {samePhoneClient && (
+                <div className="price-warn" style={{ marginTop: -4 }}>
+                  Tohle číslo už má klient <strong>{samePhoneClient.name}</strong>.{" "}
+                  <button type="button" className="link-btn" onClick={() => setClientId(samePhoneClient.id)}>
+                    Použít jeho
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+          <label className="checkbox-row">
+            <input type="checkbox" checked={pendingOnly} onChange={(e) => setPendingOnly(e.target.checked)} />
+            Jen nezávazná rezervace (klient ještě nepotvrdil / chce to až později — pomůcka se nezablokuje)
+          </label>
           <div className="field-row">
             <Field label="Od *">
               <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
@@ -2265,7 +2312,7 @@ function ReservationModal({ clients, items, onClose, onSave }) {
                     </button>
                   )}
                   {overQuantity && <div className="price-warn">Appka eviduje jen {item.quantityTotal} ks celkem.</div>}
-                  {notEnoughNow && !overQuantity && (
+                  {notEnoughNow && !overQuantity && !pendingOnly && (
                     <>
                       <div className="price-warn">
                         Momentálně k dispozici jen {item.availableQty} ks (celkem appka eviduje {item.quantityTotal} ks) —
@@ -2296,7 +2343,7 @@ function ReservationModal({ clients, items, onClose, onSave }) {
               onClick={() =>
                 onSave(
                   cartLines.map((l) => ({
-                    clientId,
+                    clientId: isNewClient ? undefined : clientId,
                     itemId: l.entry.itemId,
                     quantity: l.entry.quantity,
                     startDate,
@@ -2304,11 +2351,21 @@ function ReservationModal({ clients, items, onClose, onSave }) {
                     deposit: Number(deposit) || 0,
                     price: l.price,
                     nonBinding: l.notEnoughNow,
-                  }))
+                    pendingOnly,
+                  })),
+                  isNewClient
+                    ? { name: newClient.name.trim(), phone: newClient.phone.trim(), address: newClient.address.trim() }
+                    : null
                 )
               }
             >
-              {cartLines.length > 1 ? `Vytvořit výpůjčky (${cartLines.length})` : "Vytvořit výpůjčku"}
+              {pendingOnly
+                ? cartLines.length > 1
+                  ? `Vytvořit rezervace (${cartLines.length})`
+                  : "Vytvořit rezervaci"
+                : cartLines.length > 1
+                  ? `Vytvořit výpůjčky (${cartLines.length})`
+                  : "Vytvořit výpůjčku"}
             </button>
           </div>
         </>
@@ -2517,7 +2574,6 @@ function SaleModal({ clients, item: fixedItem, items = [], reservation, clientBy
   const [method, setMethod] = useState("Hotově");
   // objednávka = klient si to vyzvedne/koupí později (např. volal, že chce postel na pondělí)
   const [ordered, setOrdered] = useState(false);
-  const NEW_CLIENT = "__new__";
   const [newClientName, setNewClientName] = useState("");
   const [newClientPhone, setNewClientPhone] = useState("");
   const isNewClient = clientId === NEW_CLIENT || clients.length === 0;
@@ -3005,6 +3061,7 @@ export function Style() {
       .row-muted td { opacity:0.55; }
       .order-toggle { display:flex; margin-bottom:14px; }
       .order-toggle button { flex:1; justify-content:center; }
+      .new-client-box { background:#F7F2E4; border:1px solid #E8E0C8; border-radius:10px; padding:10px 12px 2px; margin:-4px 0 14px; }
       .segment-hint { font-size:12px; color:#8C8470; margin:-4px 0 12px; }
       .paid-subtext { color:#3F8D5E; font-weight:600; }
       .payment-due-subtext { color:#8A6D3B; font-weight:600; }
