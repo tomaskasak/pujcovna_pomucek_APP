@@ -16,6 +16,6 @@ jobs:
       - uses: actions/checkout@v4
       - name: Stáhnout a poslat ceník appce
         env:
-          APP_URL: https://pujcovna-backend.onrender.com
+          APP_URL: https://pujcovna.reharentkrkonose.cz
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: python3 scripts/sync-pricelist.py

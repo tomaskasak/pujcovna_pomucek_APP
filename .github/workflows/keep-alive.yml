@@ -1,18 +1,28 @@
 name: Keep app and database awake
 
-# Bezplatný Supabase projekt (databáze appky) se sám pozastaví, pokud na
-# appku týden nikdo vůbec nesáhne. Tahle úloha jednou týdně (v pondělí)
-# zavolá appku a zároveň jí řekne, ať pošle e-mailem týdenní přehled, a ve
-# čtvrtek ještě jednou "jen tak" pro bezpečnou rezervu pod tím týdenním
-# limitem (ať appku nikdy nepozastaví ani prodloužený víkend).
+# 1) Bezplatný Supabase projekt (databáze appky) se sám pozastaví, pokud na
+#    appku týden nikdo vůbec nesáhne. Proto jednou týdně (v pondělí) úloha
+#    zavolá appku a zároveň jí řekne, ať pošle e-mailem týdenní přehled, a ve
+#    čtvrtek ještě jednou "jen tak" pro bezpečnou rezervu pod tím limitem.
+# 2) Bezplatný Render appku po ~15 minutách bez návštěvy uspí a první načtení
+#    pak trvá až minutu. Přes den (6:00–22:00 pražského času) ji proto úloha
+#    každých 10 minut lehce "šťouchne" (/api/health, bez dotazu do databáze).
+#    GitHub plánuje jen v UTC a nezná letní čas — cron proto běží v širším
+#    okně a pražský čas si úloha ohlídá sama.
+# Volá se přes vlastní doménu, aby úloha fungovala i po přesunu serveru.
 on:
   schedule:
     - cron: "0 7 * * 1" # pondělí 7:00 UTC — s mailem
     - cron: "0 7 * * 4" # čtvrtek 7:00 UTC — jen tichý ping
+    - cron: "*/10 4-21 * * *" # každých 10 min, filtr na 6:00–22:00 Praha níže
   workflow_dispatch: {} # jde spustit i ručně (záložka Actions v GitHubu), pro test bez mailu
+
+env:
+  APP_URL: https://pujcovna.reharentkrkonose.cz
 
 jobs:
   ping:
+    if: github.event.schedule != '*/10 4-21 * * *'
     runs-on: ubuntu-latest
     steps:
       - name: Zavolat keep-alive endpoint appky
@@ -22,11 +32,27 @@ jobs:
           else
             NOTIFY=""
           fi
-          HTTP_STATUS=$(curl -sS -o response.json -w "%{http_code}" \
-            "https://pujcovna-backend.onrender.com/api/cron/keep-alive?secret=${{ secrets.CRON_SECRET }}${NOTIFY}")
+          HTTP_STATUS=$(curl -sS --max-time 120 -o response.json -w "%{http_code}" \
+            "$APP_URL/api/cron/keep-alive?secret=${{ secrets.CRON_SECRET }}${NOTIFY}")
           echo "HTTP status: $HTTP_STATUS"
           cat response.json
           echo
           if [ "$HTTP_STATUS" -ge 400 ]; then
             exit 1
           fi
+
+  wake:
+    if: github.event.schedule == '*/10 4-21 * * *'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Probudit appku přes den (6:00–22:00 Praha)
+        run: |
+          NOW=$(TZ=Europe/Prague date +%H%M)
+          if [ "$NOW" -lt 0600 ] || [ "$NOW" -gt 2200 ]; then
+            echo "Pražský čas $NOW je mimo 6:00–22:00, nic nedělám."
+            exit 0
+          fi
+          # nepovedený ping (třeba chvilkový výpadek) úlohu neshazuje — další přijde za 10 minut
+          curl -sS --max-time 120 -o /dev/null -w "Pražský čas $NOW, HTTP %{http_code}, %{time_total}s\n" \
+            "$APP_URL/api/health" || true
