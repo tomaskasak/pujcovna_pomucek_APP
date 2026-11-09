@@ -1,0 +1,16 @@
+name: temp-check-frankfurt
+on: push
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          for host in https://pujcovna-backend-frankfurt.onrender.com https://pujcovna-backend.onrender.com; do
+            echo "===== $host"
+            curl -s -o /dev/null --max-time 120 -w "probuzení /api/health: HTTP %{http_code} %{time_total}s\n" "$host/api/health"
+            for i in 1 2 3; do
+              curl -s -o /tmp/items --max-time 60 -w "/api/public/items: HTTP %{http_code} %{time_total}s\n" "$host/api/public/items"
+            done
+            python3 -c "import json;d=json.load(open('/tmp/items'));print('pomůcek:', len(d), '| s fotkou:', sum(1 for i in d if i.get('photoIds')))"
+            curl -s --max-time 60 "$host/verejny-prehled" | grep -o '<meta property="og:image"[^>]*>' || echo "bez og tagu"
+          done
