@@ -1,0 +1,16 @@
+name: temp-check-domain
+on: push
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          H=https://pujcovna.reharentkrkonose.cz
+          for i in $(seq 1 12); do
+            if curl -sS -o /dev/null --max-time 60 "$H/api/health"; then echo "HTTPS s platným certifikátem OK (pokus $i)"; break; fi
+            echo "pokus $i: zatím ne"; sleep 30
+          done
+          echo | openssl s_client -connect pujcovna.reharentkrkonose.cz:443 -servername pujcovna.reharentkrkonose.cz 2>/dev/null | openssl x509 -noout -subject -issuer -enddate
+          for i in 1 2 3; do curl -sS -o /tmp/items --max-time 60 -w "/api/public/items: HTTP %{http_code} %{time_total}s\n" "$H/api/public/items"; done
+          python3 -c "import json;d=json.load(open('/tmp/items'));print('pomůcek:', len(d))"
+          curl -sS -o /dev/null --max-time 60 -w "/verejny-prehled: HTTP %{http_code}\n" "$H/verejny-prehled"
