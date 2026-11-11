@@ -1,4 +1,4 @@
-name: temp-check-domain
+name: temp-check-domain2
 on: push
 jobs:
   check:
