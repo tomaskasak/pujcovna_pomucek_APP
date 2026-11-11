@@ -136,12 +136,16 @@ celá appka běží na jednom portu (`PORT` z `.env`, výchozí 4000).
 
 ## Vlastní doména
 
+Server běží na Renderu ve Frankfurtu (služba `pujcovna-backend-frankfurt`,
+blízko databáze Supabase v Londýně). Původní služba `pujcovna-backend`
+v Oregonu je pozastavená jako záloha.
+
 Appka je dostupná i na `pujcovna.reharentkrkonose.cz` místo výchozí
 `onrender.com` adresy. Nastaveno jako:
 
-1. **Render** → služba `pujcovna-backend` → **Settings → Custom Domains** →
+1. **Render** → služba `pujcovna-backend-frankfurt` → **Settings → Custom Domains** →
    **Add Custom Domain** → `pujcovna.reharentkrkonose.cz`. Render ukáže
-   CNAME hodnotu k nastavení (typicky rovnou `pujcovna-backend.onrender.com`).
+   CNAME hodnotu k nastavení (`pujcovna-backend-frankfurt.onrender.com`).
 2. **Wedos** → klientská zóna → doména `reharentkrkonose.cz` → **DNS**
    → nový záznam: typ `CNAME`, název `pujcovna`, data = hodnota z kroku 1.
    Po uložení nezapomenout kliknout **„aplikovat změny"** (Wedos DNS editor
