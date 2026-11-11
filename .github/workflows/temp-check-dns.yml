@@ -1,0 +1,9 @@
+name: temp-check-dns
+on: push
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          for ns in 1.1.1.1 8.8.8.8; do echo "== $ns: $(dig +short @$ns pujcovna.reharentkrkonose.cz CNAME)"; done
+          echo "== autoritativní NS:"; for ns in $(dig +short reharentkrkonose.cz NS); do echo "$ns -> $(dig +short @$ns pujcovna.reharentkrkonose.cz CNAME)"; done
