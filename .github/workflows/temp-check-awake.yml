@@ -1,4 +1,4 @@
-name: temp-check-awake
+name: temp-check-awake2
 on: push
 jobs:
   check:
