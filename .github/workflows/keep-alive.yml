@@ -4,11 +4,11 @@ name: Keep app and database awake
 #    appku týden nikdo vůbec nesáhne. Proto jednou týdně (v pondělí) úloha
 #    zavolá appku a zároveň jí řekne, ať pošle e-mailem týdenní přehled, a ve
 #    čtvrtek ještě jednou "jen tak" pro bezpečnou rezervu pod tím limitem.
-# 2) Bezplatný Render appku po ~15 minutách bez návštěvy uspí a první načtení
-#    pak trvá až minutu. Přes den (6:00–22:00 pražského času) ji proto úloha
-#    každých 10 minut lehce "šťouchne" (/api/health, bez dotazu do databáze).
-#    GitHub plánuje jen v UTC a nezná letní čas — cron proto běží v širším
-#    okně a pražský čas si úloha ohlídá sama.
+# 2) Bezplatný Render appku po ~15 minutách bez návštěvy uspí. Přes den ji
+#    vzhůru drží sama appka (backend/src/server.js se každých 10 min zavolá).
+#    Tahle úloha je jen záloha, hlavně na ranní probuzení — GitHub častě
+#    naplánované úlohy výrazně zpožďuje, takže se na ni samotnou spoléhat nedá.
+#    GitHub plánuje jen v UTC a nezná letní čas — pražský čas si úloha hlídá sama.
 # Volá se přes vlastní doménu, aby úloha fungovala i po přesunu serveru.
 on:
   schedule:

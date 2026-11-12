@@ -75,3 +75,19 @@ const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
   console.log(`Backend Půjčovny běží na portu ${PORT}`);
 });
+
+// Bezplatný Render appku uspí po ~15 min bez příchozího provozu a naplánované
+// úlohy na GitHubu se spouštějí s hodinovým zpožděním, takže ji udržet vzhůru
+// nestačí. Přes den (6–22 h pražského času) se proto appka každých 10 minut
+// zavolá sama přes veřejnou adresu (to Render počítá jako návštěvu). V noci
+// ji nechá usnout. RENDER_EXTERNAL_URL nastavuje jen Render, lokálně se nic neděje.
+const SELF_PING_URL = process.env.RENDER_EXTERNAL_URL;
+if (SELF_PING_URL) {
+  const pragueHour = () =>
+    Number(new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Prague", hour: "2-digit", hourCycle: "h23" }).format(new Date()));
+  setInterval(() => {
+    const h = pragueHour();
+    if (h < 6 || h >= 22) return;
+    fetch(`${SELF_PING_URL}/api/health`, { signal: AbortSignal.timeout(30000) }).catch(() => {});
+  }, 10 * 60 * 1000);
+}
