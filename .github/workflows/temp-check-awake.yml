@@ -1,9 +1,0 @@
-name: temp-check-awake2
-on: push
-jobs:
-  check:
-    runs-on: ubuntu-latest
-    steps:
-      - run: |
-          echo "Praha: $(TZ=Europe/Prague date +%H:%M)"
-          curl -sS -o /dev/null --max-time 120 -w "první požadavek po pauze: HTTP %{http_code} za %{time_total}s\n" https://pujcovna.reharentkrkonose.cz/api/health
